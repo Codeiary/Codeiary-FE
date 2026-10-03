@@ -25,7 +25,7 @@ Command로 `/var/www/codeiary`에 배포한 뒤 Nginx 설정을 반영합니다.
 
 GitHub Actions repository variables:
 
-- `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `SSM_INSTANCE_ID`, `FE_DEPLOY_BUCKET`
+- `AWS_ROLE_ARN`, `AWS_REGION`, `SSM_INSTANCE_ID`, `FE_DEPLOY_BUCKET`
 
 Access Key는 저장하지 않고 GitHub OIDC로 프론트 전용 IAM 역할을 사용합니다.
 Cloudflare Origin Certificate는 서버의 `/etc/ssl/codeiary`에 설치합니다. DNS의 루트와 `www`
