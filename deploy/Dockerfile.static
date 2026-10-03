@@ -1,0 +1,4 @@
+FROM alpine:3.22
+
+COPY dist /app
+COPY deploy/nginx/codeiary.conf /etc/codeiary/codeiary.conf
