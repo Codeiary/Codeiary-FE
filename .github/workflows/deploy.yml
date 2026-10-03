@@ -7,7 +7,12 @@ on:
 
 permissions:
   contents: read
+  packages: write
   id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-static
 
 jobs:
   deploy:
@@ -22,28 +27,45 @@ jobs:
         run: npm ci && npm run build
         env:
           VITE_API_BASE_URL: /api
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=sha,format=long
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.static
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
       - name: Configure temporary AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
-      - name: Upload release
-        run: |
-          aws s3 sync dist "s3://${{ vars.FE_DEPLOY_BUCKET }}/releases/${GITHUB_SHA}/dist" --delete
-          aws s3 cp deploy/nginx/codeiary.conf "s3://${{ vars.FE_DEPLOY_BUCKET }}/releases/${GITHUB_SHA}/codeiary.conf"
       - name: Deploy through SSM
         env:
           INSTANCE_ID: ${{ vars.SSM_INSTANCE_ID }}
-          BUCKET: ${{ vars.FE_DEPLOY_BUCKET }}
         run: |
+          IMAGE_NAME_LOWER=$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
+          IMAGE="${REGISTRY}/${IMAGE_NAME_LOWER}:sha-${GITHUB_SHA}"
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name AWS-RunShellScript \
             --comment "Deploy Codeiary FE ${GITHUB_SHA}" \
             --parameters commands="[
               \"set -eu\",
-              \"aws s3 sync s3://${BUCKET}/releases/${GITHUB_SHA}/dist /var/www/codeiary --delete\",
-              \"aws s3 cp s3://${BUCKET}/releases/${GITHUB_SHA}/codeiary.conf /etc/nginx/sites-available/codeiary\",
+              \"docker pull ${IMAGE}\",
+              \"docker create --name codeiary-fe-release ${IMAGE}\",
+              \"find /var/www/codeiary -mindepth 1 -maxdepth 1 -exec rm -rf {} +\",
+              \"docker cp codeiary-fe-release:/app/. /var/www/codeiary/\",
+              \"docker cp codeiary-fe-release:/etc/codeiary/codeiary.conf /etc/nginx/sites-available/codeiary\",
+              \"docker rm codeiary-fe-release\",
               \"ln -sfn /etc/nginx/sites-available/codeiary /etc/nginx/sites-enabled/codeiary\",
               \"rm -f /etc/nginx/sites-enabled/default\",
               \"nginx -t\",
