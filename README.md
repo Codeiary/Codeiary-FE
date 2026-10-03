@@ -20,13 +20,14 @@ API 요청은 운영 환경에서 같은 오리진의 `/api`를 사용합니다.
 
 ## Lightsail 배포
 
-`main` 브랜치에 push하면 GitHub Actions가 정적 파일을 GHCR 이미지로 패키징하고
-SSM Run Command로 `/var/www/codeiary`에 배포한 뒤 Nginx 설정을 반영합니다.
+`main` 브랜치에 push하면 GitHub Actions가 정적 파일을 Docker 이미지로 패키징해
+Amazon ECR Public에 게시하고, SSM Run Command로 `/var/www/codeiary`와 Nginx 설정을 배포합니다.
 
 GitHub Actions repository variables:
 
 - `AWS_ROLE_ARN`, `AWS_REGION`, `SSM_INSTANCE_ID`
 
 Access Key는 저장하지 않고 GitHub OIDC로 프론트 전용 IAM 역할을 사용합니다.
-Cloudflare Origin Certificate는 서버의 `/etc/ssl/codeiary`에 설치합니다. DNS의 루트와 `www`
-레코드는 Lightsail 고정 IP로 프록시하고 SSL/TLS 모드는 `Full (strict)`로 설정합니다.
+Cloudflare의 루트 및 `www` 레코드는 Lightsail 고정 IP를 가리키고 프록시를 켭니다.
+서버는 Certbot의 Let’s Encrypt 인증서를 `/etc/letsencrypt/live/codeiary.com`에서 사용하며,
+SSL/TLS 모드는 `Full (strict)`로 설정합니다.

@@ -3,6 +3,16 @@ name: Build and deploy
 on:
   push:
     branches: ["main"]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "tsconfig*.json"
+      - "env.d.ts"
+      - "index.html"
+      - "deploy/**"
   workflow_dispatch:
 
 permissions:
