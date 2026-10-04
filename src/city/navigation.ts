@@ -31,10 +31,40 @@ export function findPath(
     x: Math.round(p.x / step),
     z: Math.round(p.z / step),
   });
-  const from = grid(start),
-    to = grid(end);
   const key = (p: Point) => `${p.x},${p.z}`;
   const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
+  const physical = (p: Point) => ({ x: p.x * step, z: p.z * step });
+  function clearSegment(a: Point, b: Point) {
+    const samples = Math.max(1, Math.ceil(distance(a, b) / 0.25));
+    for (let i = 0; i <= samples; i++) {
+      const fraction = i / samples;
+      if (
+        !canWalk(
+          { x: a.x + (b.x - a.x) * fraction, z: a.z + (b.z - a.z) * fraction },
+          obstacles,
+        )
+      )
+        return false;
+    }
+    return true;
+  }
+  // A rounded grid cell can be inside a building even when the player is outside.
+  // Connect the actual position to a nearby reachable cell before searching.
+  function connectedCell(point: Point) {
+    const center = grid(point),
+      candidates: Point[] = [];
+    for (let x = -2; x <= 2; x++)
+      for (let z = -2; z <= 2; z++)
+        candidates.push({ x: center.x + x, z: center.z + z });
+    candidates.sort(
+      (a, b) => distance(physical(a), point) - distance(physical(b), point),
+    );
+    return candidates.find((cell) => clearSegment(point, physical(cell)));
+  }
+  const from = connectedCell(start),
+    to = connectedCell(end);
+  if (!from || !to) return [];
+  if (clearSegment(start, end)) return [end];
   const open = [from];
   const previous = new Map<string, Point>();
   const score = new Map<string, number>([[key(from), 0]]);
@@ -48,14 +78,26 @@ export function findPath(
         (score.get(key(b))! + distance(b, to)),
     );
     const current = open.shift()!;
-    if (distance(current, to) < 1.5) {
+    if (key(current) === key(to)) {
       const path: Point[] = [end];
       let cursor: Point | undefined = current;
-      while (cursor && key(cursor) !== key(from)) {
-        path.push({ x: cursor.x * step, z: cursor.z * step });
+      while (cursor) {
+        path.push(physical(cursor));
+        if (key(cursor) === key(from)) break;
         cursor = previous.get(key(cursor));
       }
-      return path.reverse();
+      path.reverse();
+      const smooth: Point[] = [];
+      let anchor = start,
+        index = 0;
+      while (index < path.length) {
+        let next = path.length - 1;
+        while (next > index && !clearSegment(anchor, path[next]!)) next--;
+        anchor = path[next]!;
+        smooth.push(anchor);
+        index = next + 1;
+      }
+      return smooth;
     }
     closed.add(key(current));
     for (let dx = -1; dx <= 1; dx++)

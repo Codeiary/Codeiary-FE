@@ -8,7 +8,7 @@ export interface CityHandlers {
     positions: { id: Destination; x: number; y: number; visible: boolean }[],
   ) => void;
   enter: (id: Destination) => void;
-  moving: () => void;
+  travelling: (id: Destination) => void;
   ready: () => void;
   near: (id: Destination | null) => void;
 }
@@ -51,6 +51,8 @@ export function createCity(
   controls.enablePan = false;
   controls.minZoom = 0.7;
   controls.maxZoom = 1.65;
+  camera.zoom = controls.minZoom;
+  camera.updateProjectionMatrix();
   controls.minPolarAngle = Math.PI / 6;
   controls.maxPolarAngle = Math.PI / 2.65;
   controls.mouseButtons = {
@@ -688,27 +690,104 @@ export function createCity(
   }
   box(bike, 0, 1.1, 0, 0.12, 0.1, 1.4, "#db8966");
 
+  const capsuleGeometries = new Map<string, THREE.CapsuleGeometry>();
+  const headGeometry = new THREE.SphereGeometry(0.33, 16, 12);
+  const hairGeometry = new THREE.SphereGeometry(
+    0.345,
+    16,
+    10,
+    0,
+    Math.PI * 2,
+    0,
+    Math.PI * 0.52,
+  );
+  function capsule(
+    parent: THREE.Object3D,
+    x: number,
+    y: number,
+    z: number,
+    radius: number,
+    length: number,
+    color: string,
+  ) {
+    const key = `${radius}:${length}`;
+    if (!capsuleGeometries.has(key))
+      capsuleGeometries.set(
+        key,
+        new THREE.CapsuleGeometry(radius, length, 5, 10),
+      );
+    const mesh = new THREE.Mesh(capsuleGeometries.get(key)!, material(color));
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    parent.add(mesh);
+    return mesh;
+  }
+  function joint(parent: THREE.Object3D, x: number, y: number, z = 0) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    parent.add(pivot);
+    return pivot;
+  }
   function person(color: string) {
     const group = new THREE.Group();
-    const torso = box(group, 0, 1.6, 0, 0.62, 0.9, 0.38, color);
-    sphere(group, 0, 2.3, 0, 0.27, "#d6aa80");
-    const hair = sphere(group, 0, 2.42, -0.05, 0.26, "#4c4a40");
-    hair.scale.y = 0.65;
-    const leftLeg = box(group, -0.17, 0.75, 0, 0.23, 0.9, 0.26, "#425453");
-    const rightLeg = box(group, 0.17, 0.75, 0, 0.23, 0.9, 0.26, "#425453");
-    box(group, -0.17, 0.28, 0.06, 0.27, 0.17, 0.46, "#eee5cf");
-    box(group, 0.17, 0.28, 0.06, 0.27, 0.17, 0.46, "#eee5cf");
-    const leftArm = box(group, -0.44, 1.55, 0, 0.2, 0.8, 0.26, color);
-    const rightArm = box(group, 0.44, 1.55, 0, 0.2, 0.8, 0.26, color);
+    const torso = joint(group, 0, 1.56);
+    const hoodie = capsule(torso, 0, 0, 0, 0.33, 0.44, color);
+    hoodie.scale.z = 0.7;
+    cylinder(torso, 0, 0.51, 0, 0.1, 0.18, "#e6b48e");
+    const head = new THREE.Mesh(headGeometry, material("#e6b48e"));
+    head.position.set(0, 0.85, 0);
+    head.castShadow = true;
+    torso.add(head);
+    const hair = new THREE.Mesh(hairGeometry, material("#403c37"));
+    hair.position.copy(head.position);
+    hair.rotation.z = -0.08;
+    hair.castShadow = true;
+    torso.add(hair);
+    for (const side of [-1, 1]) {
+      sphere(torso, side * 0.32, 0.83, 0, 0.065, "#e6b48e");
+      sphere(torso, side * 0.105, 0.84, 0.303, 0.023, "#403c37");
+    }
+    sphere(torso, 0, 0.77, 0.329, 0.043, "#dca581");
+    const leftLeg = joint(group, -0.19, 1.12);
+    const rightLeg = joint(group, 0.19, 1.12);
+    const knees = [leftLeg, rightLeg].map((leg) => {
+      capsule(leg, 0, -0.26, 0, 0.125, 0.32, "#344e4c");
+      const knee = joint(leg, 0, -0.54);
+      capsule(knee, 0, -0.23, 0, 0.11, 0.3, "#344e4c");
+      const shoe = capsule(knee, 0, -0.46, 0.085, 0.12, 0.21, "#faf2e1");
+      shoe.rotation.x = Math.PI / 2;
+      shoe.scale.z = 0.75;
+      return knee;
+    });
+    const leftArm = joint(torso, -0.43, 0.33);
+    const rightArm = joint(torso, 0.43, 0.33);
+    const elbows = [leftArm, rightArm].map((arm) => {
+      capsule(arm, 0, -0.22, 0, 0.11, 0.28, color);
+      const elbow = joint(arm, 0, -0.45);
+      capsule(elbow, 0, -0.2, 0, 0.09, 0.25, color);
+      sphere(elbow, 0, -0.44, 0, 0.095, "#e6b48e");
+      return elbow;
+    });
     scene.add(group);
-    return { group, torso, leftLeg, rightLeg, leftArm, rightArm };
+    return {
+      group,
+      torso,
+      leftLeg,
+      rightLeg,
+      leftArm,
+      rightArm,
+      leftKnee: knees[0]!,
+      rightKnee: knees[1]!,
+      leftElbow: elbows[0]!,
+      rightElbow: elbows[1]!,
+    };
   }
   const player = person("#ee7047");
   player.group.position.set(8, 0.3, 20.5);
   player.group.scale.setScalar(2.35);
-  box(player.group, 0, 2.59, 0.06, 0.62, 0.15, 0.54, "#f5e8ce");
-  box(player.group, 0, 1.65, 0.205, 0.5, 0.13, 0.05, "#f5e8ce");
-  box(player.group, 0, 1.6, -0.29, 0.5, 0.6, 0.18, "#3d625d");
+  const backpack = capsule(player.torso, 0, 0.03, -0.28, 0.24, 0.23, "#3d625d");
+  backpack.scale.z = 0.6;
+  player.group.rotation.y = -0.3;
   const ringMaterial = new THREE.MeshBasicMaterial({
     color: "#e88256",
     transparent: true,
@@ -756,6 +835,7 @@ export function createCity(
 
   const keys = new Set<string>();
   let route: Point[] = [],
+    routeDestination: Destination | null = null,
     paused = false,
     suppressed: Destination | null = null,
     night = false,
@@ -765,6 +845,7 @@ export function createCity(
   let animationId = 0,
     lastTime = 0,
     time = 0,
+    gaitPhase = 0,
     lastNotification = 0;
   const projected = new THREE.Vector3();
   const raycaster = new THREE.Raycaster();
@@ -831,21 +912,20 @@ export function createCity(
       return true;
     }
     route = findPath(player.group.position, places[id].entrance, obstacles);
-    if (route.length) {
-      handlers.moving();
-      return true;
-    }
-    return false;
+    routeDestination = route.length ? id : null;
+    if (route.length) handlers.travelling(id);
+    return route.length > 0;
   }
   function animate(timestamp: number) {
     if (disposed) return;
     animationId = requestAnimationFrame(animate);
-    const delta = Math.min((timestamp - (lastTime || timestamp)) / 1000, 0.05);
+    const delta = Math.min((timestamp - (lastTime || timestamp)) / 1000, 0.12);
     lastTime = timestamp;
     time += delta;
     const position = player.group.position;
     let dx = 0,
       dz = 0;
+    let waypointDistance = Infinity;
     if (!paused) {
       const right =
         Number(keys.has("ArrowRight") || keys.has("d")) -
@@ -855,6 +935,7 @@ export function createCity(
         Number(keys.has("ArrowDown") || keys.has("s"));
       if (right || forward) {
         route = [];
+        routeDestination = null;
         const angle = controls.getAzimuthalAngle();
         dx = right * Math.cos(angle) - forward * Math.sin(angle);
         dz = -right * Math.sin(angle) - forward * Math.cos(angle);
@@ -864,45 +945,65 @@ export function createCity(
       } else if (route.length) {
         const next = route[0]!;
         const distance = Math.hypot(next.x - position.x, next.z - position.z);
-        if (distance < 0.4) route.shift();
+        if (distance < 0.08) route.shift();
         else {
           dx = (next.x - position.x) / distance;
           dz = (next.z - position.z) / distance;
+          waypointDistance = distance;
         }
       }
-      const speed = keys.has("Shift") ? 12 : 7;
+      const running = keys.has("Shift") || route.length > 0;
+      const speed = running ? 21 : 11;
       if (dx || dz) {
-        handlers.moving();
-        if (
-          canWalk(
-            { x: position.x + dx * delta * speed, z: position.z },
-            obstacles,
-          )
-        )
-          position.x += dx * delta * speed;
-        if (
-          canWalk(
-            { x: position.x, z: position.z + dz * delta * speed },
-            obstacles,
-          )
-        )
-          position.z += dz * delta * speed;
+        const travel = Math.min(speed * delta, waypointDistance);
+        const steps = Math.max(1, Math.ceil(travel / 0.2));
+        const stepX = (dx * travel) / steps,
+          stepZ = (dz * travel) / steps;
+        // Short collision steps keep running safe at lower frame rates.
+        for (let step = 0; step < steps; step++) {
+          if (canWalk({ x: position.x + stepX, z: position.z }, obstacles))
+            position.x += stepX;
+          if (canWalk({ x: position.x, z: position.z + stepZ }, obstacles))
+            position.z += stepZ;
+        }
         const targetAngle = Math.atan2(dx, dz);
         const angleDelta = Math.atan2(
           Math.sin(targetAngle - player.group.rotation.y),
           Math.cos(targetAngle - player.group.rotation.y),
         );
         player.group.rotation.y += angleDelta * Math.min(delta * 12, 1);
-        player.leftLeg.rotation.x = Math.sin(time * 12) * 0.45;
-        player.rightLeg.rotation.x = -Math.sin(time * 12) * 0.45;
-        player.leftArm.rotation.x = -Math.sin(time * 12) * 0.3;
-        player.rightArm.rotation.x = Math.sin(time * 12) * 0.3;
-        player.torso.position.y = 1.6 + Math.sin(time * 24) * 0.025;
+        gaitPhase += delta * (running ? 17 : 10);
+        const stride = Math.sin(gaitPhase);
+        player.leftLeg.rotation.x = stride * (running ? 0.95 : 0.45);
+        player.rightLeg.rotation.x = -player.leftLeg.rotation.x;
+        player.leftKnee.rotation.x =
+          (running ? 0.45 : 0.05) +
+          Math.max(0, -stride) * (running ? 0.85 : 0.45);
+        player.rightKnee.rotation.x =
+          (running ? 0.45 : 0.05) +
+          Math.max(0, stride) * (running ? 0.85 : 0.45);
+        player.leftArm.rotation.x = -stride * (running ? 0.8 : 0.3);
+        player.rightArm.rotation.x = -player.leftArm.rotation.x;
+        player.leftElbow.rotation.x = running ? -1.1 : -0.15;
+        player.rightElbow.rotation.x = running ? -1.1 : -0.15;
+        player.torso.rotation.x = running ? 0.16 : 0;
+        position.y =
+          0.3 + Math.abs(Math.sin(gaitPhase * 2)) * (running ? 0.13 : 0.035);
       } else {
-        player.leftLeg.rotation.x *= 0.8;
-        player.rightLeg.rotation.x *= 0.8;
-        player.leftArm.rotation.x *= 0.8;
-        player.rightArm.rotation.x *= 0.8;
+        const settle = Math.exp(-delta * 14);
+        for (const joint of [
+          player.leftLeg,
+          player.rightLeg,
+          player.leftArm,
+          player.rightArm,
+          player.leftKnee,
+          player.rightKnee,
+          player.leftElbow,
+          player.rightElbow,
+          player.torso,
+        ])
+          joint.rotation.x *= settle;
+        position.y = 0.3 + (position.y - 0.3) * settle;
       }
       nearest = null;
       for (const id of Object.keys(places) as Destination[]) {
@@ -910,8 +1011,13 @@ export function createCity(
           distance = Math.hypot(position.x - p.x, position.z - p.z);
         if (id === suppressed && distance > 7) suppressed = null;
         if (distance < 6) nearest = id;
-        if (distance < 2.8 && suppressed !== id) {
+        if (
+          distance < 2.8 &&
+          suppressed !== id &&
+          (!routeDestination || routeDestination === id)
+        ) {
           route = [];
+          routeDestination = null;
           suppressed = id;
           handlers.enter(id);
           break;
@@ -1011,7 +1117,7 @@ export function createCity(
     resetCamera() {
       camera.position.copy(viewTarget).add(new THREE.Vector3(78, 88, 100));
       controls.target.copy(viewTarget);
-      camera.zoom = 1;
+      camera.zoom = controls.minZoom;
       camera.updateProjectionMatrix();
       controls.update();
     },
@@ -1024,12 +1130,14 @@ export function createCity(
       if (value) {
         keys.clear();
         route = [];
+        routeDestination = null;
       }
     },
     interact() {
       if (nearest && !paused) {
         suppressed = nearest;
         route = [];
+        routeDestination = null;
         handlers.enter(nearest);
       }
     },

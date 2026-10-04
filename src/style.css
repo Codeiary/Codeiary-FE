@@ -158,18 +158,6 @@ svg {
   border-radius: 50%;
   box-shadow: 0 0 0 4px #7e986811;
 }
-.header-divider {
-  width: 1px;
-  height: 19px;
-  background: #dadbd1;
-}
-.about-button {
-  font-size: 12px;
-  display: flex;
-  gap: 13px;
-  align-items: center;
-  padding: 10px 0;
-}
 .city-board {
   height: calc(100% - 80px);
   position: relative;
@@ -210,14 +198,11 @@ svg {
   top: 62px;
   pointer-events: none;
   z-index: 4;
-  transition:
-    opacity 0.7s,
-    transform 0.7s;
 }
 .hero-copy::before {
   content: "";
   position: absolute;
-  inset: -35px -55px -25px -45px;
+  inset: -25px -30px -20px -35px;
   z-index: -1;
   pointer-events: none;
   background: radial-gradient(
@@ -244,18 +229,18 @@ svg {
   line-height: 1;
 }
 .hero-copy h1 {
-  font-size: clamp(44px, 4.1vw, 66px);
-  line-height: 1.3;
-  letter-spacing: -3.2px;
+  font-size: clamp(36px, 3.2vw, 48px);
+  line-height: 1.08;
+  letter-spacing: -1.9px;
   font-weight: 650;
-  margin: 25px 0 22px;
+  margin: 18px 0 15px;
 }
 .hero-copy h1 span {
   color: #d67c57;
-  font-family: inherit;
-  font-style: normal;
-  font-weight: 650;
-  letter-spacing: inherit;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -1.5px;
 }
 .hero-copy p {
   font-size: 13px;
@@ -292,74 +277,6 @@ svg {
 .explore-button:hover {
   background: #c46f4d;
   transform: translateY(-2px);
-}
-.hero-footnote {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 8px;
-  letter-spacing: 1.6px;
-  color: #8a8e7e;
-  margin-top: 23px;
-}
-.short-line {
-  height: 1px;
-  width: 20px;
-  background: #999f8f;
-}
-.is-exploring .hero-copy {
-  opacity: 0.18;
-  transform: translateY(-8px);
-  pointer-events: none;
-}
-.is-exploring .hero-copy button {
-  pointer-events: none;
-}
-.is-exploring .hero-copy:hover {
-  opacity: 0.8;
-}
-.world-weather {
-  position: absolute;
-  right: 55px;
-  top: 37px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 0;
-  z-index: 4;
-  pointer-events: none;
-}
-.weather-icon {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid #9eaa8b50;
-  border-radius: 50%;
-  color: #858b62;
-}
-.world-weather div {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.world-weather div > span {
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 1.5px;
-  color: #7d8774;
-}
-.world-weather strong {
-  font-size: 10px;
-  font-weight: 450;
-  color: #727c68;
-}
-.weather-degree {
-  font-size: 27px;
-  font-weight: 500;
-  letter-spacing: -1px;
-  margin-left: 10px;
-  color: #7b8369;
 }
 .building-labels {
   position: absolute;
@@ -476,69 +393,16 @@ svg {
   margin: 4px 6px;
   background: #dce0cf;
 }
-.street-caption {
-  position: absolute;
-  right: 90px;
-  bottom: 188px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  align-items: flex-end;
-  pointer-events: none;
-  color: #fdf9e7;
-  text-shadow: 0 1px 8px #4b635642;
-}
-.caption-line {
-  width: 35px;
-  height: 1px;
-  background: #fff9df9c;
-  margin-bottom: 3px;
-}
-.street-caption > span:not(.caption-line) {
-  font-size: 9px;
-  letter-spacing: 2px;
-  font-weight: 600;
-}
-.street-caption small {
-  font-size: 9px;
-  letter-spacing: 0.3px;
-}
 .minimap {
   position: absolute;
   left: 36px;
   bottom: 28px;
-  width: 225px;
-  padding: 14px;
-  background: #fbf9efec;
-  border: 1px solid #fffdf5;
-  border-radius: 7px;
+  width: 210px;
+  padding: 0;
+  border-radius: 6px;
+  overflow: hidden;
   z-index: 6;
-  box-shadow: 0 4px 20px #3f4f3810;
-  backdrop-filter: blur(10px);
-}
-.minimap-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.minimap-heading > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 0.8px;
-  color: #62715b;
-}
-.minimap-heading button {
-  font-size: 17px;
-  color: #949b89;
-  padding: 0 2px;
-  line-height: 1;
-}
-.minimap.collapsed .minimap-heading {
-  margin: 0;
+  box-shadow: 0 4px 18px #3f4f3826;
 }
 .map-svg {
   width: 100%;
@@ -552,14 +416,6 @@ svg {
 .map-place:hover {
   opacity: 0.65;
 }
-.map-location {
-  display: flex;
-  align-items: center;
-  font-size: 8px;
-  gap: 6px;
-  color: #757c6c;
-  margin-top: 11px;
-}
 .player-dot {
   width: 5px;
   height: 5px;
@@ -567,12 +423,6 @@ svg {
   border-radius: 50%;
   flex-shrink: 0;
   box-shadow: 0 0 0 3px #d7805514;
-}
-.map-coordinate {
-  font-size: 8px;
-  letter-spacing: 0.7px;
-  margin-left: auto;
-  color: #9a9f90;
 }
 .control-dock {
   position: absolute;
@@ -582,7 +432,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 16px 20px;
+  padding: 12px 18px;
   background: #fcfaf1eb;
   border: 1px solid #fffdf7;
   border-radius: 7px;
@@ -590,39 +440,6 @@ svg {
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px #3f4f380e;
   white-space: nowrap;
-}
-.control-intro {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-.walk-icon {
-  width: 35px;
-  height: 35px;
-  display: grid;
-  place-items: center;
-  background: #e8e9da;
-  border-radius: 50%;
-  color: #7a8d6b;
-}
-.control-intro > div {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.control-intro strong {
-  font-size: 10px;
-  font-weight: 550;
-}
-.control-intro > div > span {
-  font-size: 8px;
-  color: #8f9683;
-}
-.dock-divider {
-  height: 28px;
-  width: 1px;
-  background: #dbdece;
-  margin: 0 1px;
 }
 .control-item {
   display: flex;
@@ -799,15 +616,8 @@ kbd {
   color: #e59a72;
 }
 .is-night .hero-copy p,
-.is-night .eyebrow,
-.is-night .hero-footnote {
+.is-night .eyebrow {
   color: #b7bfae;
-}
-.is-night .world-weather strong,
-.is-night .world-weather div > span,
-.is-night .weather-degree,
-.is-night .weather-icon {
-  color: #cbd1b9;
 }
 .is-night .world-signature {
   color: #c3cbb3;
@@ -912,8 +722,7 @@ kbd {
   margin-bottom: 14px;
 }
 .window-heading h2,
-.article-body h2,
-.help-body h2 {
+.article-body h2 {
   font-size: 31px;
   letter-spacing: -1.7px;
   line-height: 1.5;
@@ -1552,76 +1361,6 @@ kbd {
   background: #e8dfbd;
   color: #b1a16c;
 }
-.help-window {
-  width: 690px;
-}
-.help-body {
-  overflow: auto;
-  overscroll-behavior: contain;
-  text-align: center;
-  padding: 35px 45px 40px;
-}
-.help-symbol {
-  width: 78px;
-  height: 78px;
-  border-radius: 50%;
-  background: #e6ebda;
-  color: #8d9b76;
-  display: grid;
-  place-items: center;
-  margin: 0 auto 25px;
-}
-.help-body .section-kicker {
-  font-size: 8px;
-}
-.help-body h2 {
-  font-size: 32px;
-  line-height: 1.5;
-  margin: 5px 0 18px;
-}
-.help-body > p {
-  color: #929d83;
-  font-size: 12px;
-  line-height: 1.9;
-  margin: 0 0 30px;
-}
-.help-instructions {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-  padding: 25px 0;
-  margin-bottom: 24px;
-  border-top: 1px solid #e3e7d8;
-  border-bottom: 1px solid #e3e7d8;
-}
-.help-instructions > div {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 10px;
-}
-.help-instructions kbd {
-  height: 25px;
-  min-width: 24px;
-  padding: 0 4px;
-}
-.help-instructions > div > span {
-  display: flex;
-  gap: 3px;
-}
-.help-instructions strong {
-  font-size: 10px;
-  font-weight: 550;
-  color: #7a886b;
-}
-.help-instructions small {
-  font-size: 8px;
-  color: #a0aa92;
-}
-.help-body > p.help-note {
-  font-size: 10px;
-  margin: 0 0 24px;
-}
 .modal-enter-active,
 .modal-leave-active {
   transition: opacity 0.25s;
@@ -1654,7 +1393,7 @@ kbd {
     left: 75px;
   }
   .hero-copy h1 {
-    font-size: 72px;
+    font-size: 52px;
   }
   .hero-copy p {
     font-size: 14px;
@@ -1670,14 +1409,10 @@ kbd {
   }
   .control-dock {
     bottom: 38px;
-    padding: 18px 25px;
+    padding: 13px 20px;
   }
   .world-tools {
     right: 36px;
-  }
-  .world-weather {
-    right: 68px;
-    top: 47px;
   }
 }
 @media (max-width: 1200px) {
@@ -1688,8 +1423,7 @@ kbd {
   .site-header nav {
     gap: 24px;
   }
-  .live-indicator,
-  .header-divider {
+  .live-indicator {
     display: none;
   }
   .hero-copy {
@@ -1697,32 +1431,23 @@ kbd {
     top: 47px;
   }
   .hero-copy h1 {
-    font-size: 48px;
-  }
-  .world-weather {
-    right: 35px;
-    top: 26px;
+    font-size: 42px;
   }
   .world-signature {
-    bottom: 110px;
+    bottom: 36px;
     right: 24px;
   }
   .minimap {
     left: 24px;
     bottom: 24px;
-    width: 190px;
-    padding: 12px;
+    width: 180px;
   }
   .control-dock {
-    left: auto;
-    right: 24px;
-    transform: none;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
     bottom: 24px;
     gap: 18px;
-  }
-  .street-caption {
-    bottom: 142px;
-    right: 80px;
   }
   .world-tools {
     right: 20px;
@@ -1730,7 +1455,7 @@ kbd {
 }
 @media (max-width: 900px) {
   .hero-copy h1 {
-    font-size: 42px;
+    font-size: 38px;
   }
   .hero-copy {
     left: 30px;
@@ -1751,24 +1476,6 @@ kbd {
   .hero-copy .explore-button > span {
     width: 30px;
     height: 30px;
-  }
-  .hero-footnote {
-    font-size: 7px;
-    margin-top: 17px;
-  }
-  .world-weather div {
-    display: none;
-  }
-  .world-weather {
-    gap: 3px;
-    top: 26px;
-  }
-  .weather-degree {
-    font-size: 22px;
-  }
-  .weather-icon {
-    width: 32px;
-    height: 32px;
   }
   .building-label {
     padding: 7px 9px 7px 7px;
@@ -1792,16 +1499,6 @@ kbd {
     padding: 14px;
     gap: 13px;
   }
-  .control-intro {
-    gap: 8px;
-  }
-  .control-intro strong {
-    font-size: 9px;
-  }
-  .control-intro > div > span {
-    font-size: 7px;
-  }
-  .walk-icon,
   .optional-control {
     display: none;
   }
@@ -1872,8 +1569,8 @@ kbd {
     top: 29px;
   }
   .hero-copy h1 {
-    font-size: 32px;
-    letter-spacing: -2.8px;
+    font-size: 31px;
+    letter-spacing: -1.3px;
     margin: 18px 0 14px;
   }
   .hero-copy h1 span {
@@ -1881,7 +1578,7 @@ kbd {
   }
   .world-signature {
     right: 20px;
-    bottom: 83px;
+    bottom: 25px;
     gap: 8px;
     padding: 4px 8px;
     font-size: 9px;
@@ -1910,9 +1607,6 @@ kbd {
   .tiny-cross {
     font-size: 14px;
   }
-  .hero-footnote {
-    display: none;
-  }
   .hero-copy .explore-button {
     font-size: 9px;
     padding: 7px 7px 7px 15px;
@@ -1921,17 +1615,6 @@ kbd {
   .hero-copy .explore-button > span {
     width: 27px;
     height: 27px;
-  }
-  .world-weather {
-    right: 20px;
-    top: 25px;
-  }
-  .world-weather .weather-icon {
-    display: none;
-  }
-  .weather-degree {
-    font-size: 22px;
-    color: #889077;
   }
   .building-label {
     padding: 6px 8px;
@@ -1977,58 +1660,13 @@ kbd {
   .world-tools > span {
     margin: 2px 4px;
   }
-  .street-caption {
-    display: none;
-  }
   .minimap {
-    bottom: 100px;
+    bottom: 24px;
     left: 18px;
     width: 138px;
-    padding: 9px;
     border-radius: 5px;
   }
-  .minimap-heading {
-    margin-bottom: 7px;
-  }
-  .minimap-heading > span {
-    font-size: 5.5px;
-    gap: 4px;
-    letter-spacing: 0.4px;
-  }
-  .minimap-heading > span > svg {
-    width: 10px;
-  }
-  .minimap-heading button {
-    font-size: 14px;
-  }
-  .map-location {
-    font-size: 6px;
-    margin-top: 8px;
-    gap: 5px;
-  }
-  .map-coordinate {
-    display: none;
-  }
-  .map-location .player-dot {
-    width: 4px;
-    height: 4px;
-  }
   .control-dock {
-    left: 18px;
-    right: 18px;
-    bottom: 18px;
-    padding: 13px 14px;
-    gap: 13px;
-    justify-content: space-between;
-    border-radius: 6px;
-  }
-  .control-intro strong {
-    font-size: 8px;
-  }
-  .control-intro > div > span {
-    font-size: 6.5px;
-  }
-  .dock-divider {
     display: none;
   }
   .control-item {
@@ -2051,7 +1689,7 @@ kbd {
     display: grid;
     position: absolute;
     right: 20px;
-    bottom: 108px;
+    bottom: 78px;
     grid-template-columns: 34px 34px 34px;
     grid-template-rows: 34px 34px;
     gap: 4px;
@@ -2096,9 +1734,6 @@ kbd {
     line-height: 1.8;
     padding: 10px 15px;
     top: 16px;
-  }
-  .is-exploring .hero-copy {
-    opacity: 0.12;
   }
   .modal-backdrop {
     padding: 12px;
@@ -2315,36 +1950,6 @@ kbd {
   .post-category {
     font-size: 7px;
   }
-  .help-body {
-    padding: 27px 22px 33px;
-  }
-  .help-body h2 {
-    font-size: 27px;
-  }
-  .help-body > p {
-    font-size: 10px;
-  }
-  .help-symbol {
-    width: 63px;
-    height: 63px;
-  }
-  .help-instructions {
-    gap: 6px;
-  }
-  .help-instructions strong {
-    font-size: 8px;
-  }
-  .help-instructions small {
-    font-size: 6.5px;
-  }
-  .help-instructions kbd {
-    min-width: 18px;
-    height: 20px;
-    font-size: 9px;
-  }
-  .help-instructions > div > span {
-    gap: 2px;
-  }
   .fallback-message {
     left: 20px;
     right: 20px;
@@ -2378,15 +1983,12 @@ kbd {
     top: 20px;
   }
   .hero-copy h1 {
-    font-size: 30px;
-    margin: 16px 0;
-    letter-spacing: -2px;
+    font-size: 28px;
+    margin: 12px 0;
+    letter-spacing: -1px;
   }
   .hero-copy p,
-  .hero-footnote,
-  .world-weather,
-  .minimap,
-  .street-caption {
+  .minimap {
     display: none;
   }
   .world-tools {
