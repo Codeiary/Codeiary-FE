@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { checkAdminSession } from "./auth/admin";
+import { authGuard } from "./auth/navigation";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -11,10 +11,14 @@ const router = createRouter({
       meta: { title: "Codeiary — Code Diary" },
     },
     {
+      path: "/login",
+      name: "login",
+      component: () => import("./pages/LoginPage.vue"),
+      meta: { title: "로그인 — Codeiary" },
+    },
+    {
       path: "/admin/login",
-      name: "admin-login",
-      component: () => import("./pages/AdminLoginPage.vue"),
-      meta: { title: "관리자 미리보기 — Codeiary" },
+      redirect: { name: "login", query: { redirect: "/admin" } },
     },
     {
       path: "/admin",
@@ -27,14 +31,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
-  if (!to.meta.requiresAdmin && to.name !== "admin-login") return;
-  const authenticated = await checkAdminSession();
-  if (to.meta.requiresAdmin && !authenticated)
-    return { name: "admin-login", replace: true };
-  if (to.name === "admin-login" && authenticated)
-    return { name: "admin", replace: true };
-});
+router.beforeEach(authGuard);
 router.afterEach((to) => {
   document.title = String(to.meta.title || "Codeiary");
 });

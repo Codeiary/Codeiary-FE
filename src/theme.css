@@ -37,14 +37,6 @@
 .world-tools .theme-toggle {
   background: transparent;
 }
-.admin-entry {
-  position: relative;
-}
-.admin-entry-theme {
-  position: absolute;
-  right: 5%;
-  top: 35px;
-}
 .admin-account .theme-toggle {
   display: grid;
 }
@@ -69,7 +61,6 @@
   color: var(--theme-text);
 }
 :root[data-theme="dark"] .site-header nav button,
-:root[data-theme="dark"] .live-indicator,
 :root[data-theme="dark"] .window-topbar > span:nth-child(2),
 :root[data-theme="dark"] .close-button,
 :root[data-theme="dark"] .control-item,
@@ -84,13 +75,8 @@
 :root[data-theme="dark"] .empty-state span,
 :root[data-theme="dark"] .content-window p,
 :root[data-theme="dark"] .news-card small,
-:root[data-theme="dark"] .admin-kicker,
 :root[data-theme="dark"] .admin-header-label,
-:root[data-theme="dark"] .admin-account button,
-:root[data-theme="dark"] .admin-placeholder p,
-:root[data-theme="dark"] .admin-entry-card > p,
-:root[data-theme="dark"] .admin-back,
-:root[data-theme="dark"] .admin-entry-footnote {
+:root[data-theme="dark"] .admin-placeholder p {
   color: var(--theme-muted);
 }
 :root[data-theme="dark"] .site-header nav button:hover,
@@ -99,8 +85,7 @@
 :root[data-theme="dark"] .window-bottom-nav button.current,
 :root[data-theme="dark"] .section-kicker,
 :root[data-theme="dark"] .post-category,
-:root[data-theme="dark"] .project-type,
-:root[data-theme="dark"] .admin-entry em {
+:root[data-theme="dark"] .project-type {
   color: var(--theme-accent);
 }
 :root[data-theme="dark"] .building-label {
@@ -122,8 +107,7 @@
 :root[data-theme="dark"] .toast-message,
 :root[data-theme="dark"] .mobile-controls button,
 :root[data-theme="dark"] .demo-note,
-:root[data-theme="dark"] .project-tags > span,
-:root[data-theme="dark"] .admin-demo-badge {
+:root[data-theme="dark"] .project-tags > span {
   background: var(--theme-raised);
   border-color: var(--theme-border);
   color: var(--theme-muted);
@@ -209,18 +193,7 @@
   background: #172127;
   color: var(--theme-text);
 }
-:root[data-theme="dark"] .admin-entry {
-  background: radial-gradient(ellipse at 50% 50%, #25352f 0%, #172127 65%);
-}
-:root[data-theme="dark"] .admin-error,
-:root[data-theme="dark"] .admin-entry-card > .admin-error {
-  color: #f2aa8b;
-}
 @media (max-width: 700px) {
-  .admin-entry-theme {
-    top: 18px;
-    right: 22px;
-  }
   .admin-account .theme-toggle {
     width: 30px;
     height: 30px;
