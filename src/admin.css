@@ -46,7 +46,6 @@
   width: min(1050px, 90%);
   margin: 66px auto 32px;
 }
-.admin-welcome h1,
 .admin-entry h1 {
   font-size: clamp(38px, 5vw, 62px);
   font-weight: 600;
@@ -54,27 +53,10 @@
   line-height: 1.08;
   margin: 21px 0 19px;
 }
-.admin-welcome em,
 .admin-entry em {
   font-family: Georgia, serif;
   font-weight: 400;
   color: #ce7958;
-}
-.admin-welcome p {
-  color: #7e8875;
-  font-size: 13px;
-}
-.admin-section-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 56px 0 19px;
-}
-.admin-section-top h2 {
-  font-size: 15px;
-  font-weight: 550;
-  margin: 0;
 }
 .admin-demo-badge {
   color: #8a907c;
@@ -83,81 +65,24 @@
   padding: 7px 11px;
   border-radius: 4px;
 }
-.admin-destinations {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+.admin-placeholder {
+  padding: 34px 0;
 }
-.admin-destination {
-  display: block;
-  padding: 27px;
-  border: 1px solid #e3e5db;
-  border-radius: 9px;
-  background: #fdfbf5;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
-}
-.admin-destination:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 35px #53655312;
-}
-.admin-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 47px;
-  color: var(--admin-accent);
-}
-.admin-card-top > span {
-  font-family: Georgia, serif;
-  font-size: 27px;
-  font-style: italic;
-}
-.admin-destination small {
-  font-size: 8px;
-  letter-spacing: 1.4px;
-  color: var(--admin-accent);
-}
-.admin-destination h3 {
-  margin: 12px 0 13px;
-  font-size: 22px;
+.admin-placeholder h1 {
+  font-size: 28px;
   font-weight: 550;
-  letter-spacing: -0.8px;
+  letter-spacing: -1px;
+  margin: 0 0 16px;
 }
-.admin-destination p {
-  min-height: 44px;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.9;
-  color: #8c9280;
-  word-break: keep-all;
+.admin-placeholder p {
+  color: #85917d;
+  font-size: 13px;
+  margin: 0 0 28px;
 }
-.admin-card-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 23px;
-  margin-top: 25px;
-  border-top: 1px solid #e8e9df;
-  font-size: 11px;
-  color: var(--admin-accent);
-}
-.admin-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 34px;
-  font-size: 9px;
-  letter-spacing: 1.5px;
-  color: #8f9785;
-  padding-bottom: 20px;
-}
-.admin-footer a {
-  display: flex;
+.admin-return {
+  display: inline-flex;
   align-items: center;
   gap: 10px;
-  letter-spacing: 0;
   font-size: 11px;
 }
 .admin-entry {
@@ -266,36 +191,12 @@
     margin-top: 38px;
     width: calc(100% - 40px);
   }
-  .admin-welcome h1 {
-    font-size: 42px;
-  }
   .admin-kicker {
     font-size: 8px;
     letter-spacing: 1.4px;
   }
-  .admin-destinations {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .admin-destination {
-    padding: 23px;
-  }
-  .admin-card-top {
-    margin-bottom: 25px;
-  }
-  .admin-destination p {
-    min-height: auto;
-  }
-  .admin-section-top {
-    margin-top: 37px;
-  }
   .admin-demo-badge {
     font-size: 9px;
-  }
-  .admin-footer {
-    gap: 12px;
-    font-size: 7px;
-    letter-spacing: 1px;
   }
   .admin-entry {
     padding: 23px 16px;

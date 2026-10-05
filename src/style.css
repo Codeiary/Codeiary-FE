@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700;750;800;850&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700;750;800;850&family=Noto+Sans+KR:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 :root {
   font-family: "DM Sans", "Noto Sans KR", sans-serif;
   color: #303d35;
@@ -68,37 +68,25 @@ svg {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 29px;
-  font-weight: 800;
-  letter-spacing: -1.6px;
+  font-family: "Space Grotesk", "DM Sans", sans-serif;
+  color: #303030;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -1px;
+  line-height: 1;
   padding: 0;
 }
 .brand-period {
-  color: #dd7d56;
+  color: #dd805b;
+}
+.brand-wordmark {
+  color: #303030;
 }
 .brand-mark {
-  width: 31px;
-  height: 30px;
-  display: flex;
-  align-items: end;
-  gap: 3px;
-  transform: skewY(-13deg);
-  margin-right: 2px;
-}
-.brand-mark i {
+  width: 36px;
+  height: 36px;
   display: block;
-  width: 8px;
-  height: 24px;
-  background: #4b6e58;
-  border-radius: 2px;
-}
-.brand-mark i:nth-child(2) {
-  height: 31px;
-  background: #789575;
-}
-.brand-mark i:nth-child(3) {
-  height: 19px;
-  background: #a7b59a;
+  flex-shrink: 0;
 }
 .site-header nav {
   display: flex;
@@ -219,35 +207,35 @@ svg {
   align-items: center;
   gap: 9px;
   color: #677366;
-  font-size: 10px;
+  font-size: 16.6px;
   font-weight: 650;
   letter-spacing: 1.8px;
 }
 .tiny-cross {
   color: #7b9176;
-  font-size: 18px;
+  font-size: 25px;
   line-height: 1;
 }
 .hero-copy h1 {
-  font-size: clamp(36px, 3.2vw, 48px);
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: clamp(44px, calc(3.4vw + 6px), 57px);
   line-height: 1.08;
-  letter-spacing: -1.9px;
-  font-weight: 650;
+  letter-spacing: -1.5px;
+  font-weight: 400;
   margin: 18px 0 15px;
 }
 .hero-copy h1 span {
   color: #d67c57;
-  font-family: Georgia, "Times New Roman", serif;
-  font-style: italic;
-  font-weight: 400;
-  letter-spacing: -1.5px;
+  letter-spacing: inherit;
 }
-.hero-copy p {
-  font-size: 13px;
-  line-height: 1.9;
+.hero-subtitle {
+  margin: 0;
   color: #747a6a;
-  margin: 0 0 25px;
-  letter-spacing: -0.15px;
+  font-size: 18.75px;
+  font-style: normal;
+  font-weight: 450;
+  line-height: 1.6;
 }
 .explore-button {
   display: inline-flex;
@@ -615,8 +603,8 @@ kbd {
 .is-night .hero-copy h1 span {
   color: #e59a72;
 }
-.is-night .hero-copy p,
-.is-night .eyebrow {
+.is-night .eyebrow,
+.is-night .hero-subtitle {
   color: #b7bfae;
 }
 .is-night .world-signature {
@@ -1393,10 +1381,7 @@ kbd {
     left: 75px;
   }
   .hero-copy h1 {
-    font-size: 52px;
-  }
-  .hero-copy p {
-    font-size: 14px;
+    font-size: 61px;
   }
   .minimap {
     width: 255px;
@@ -1431,7 +1416,7 @@ kbd {
     top: 47px;
   }
   .hero-copy h1 {
-    font-size: 42px;
+    font-size: 51px;
   }
   .world-signature {
     bottom: 36px;
@@ -1455,27 +1440,15 @@ kbd {
 }
 @media (max-width: 900px) {
   .hero-copy h1 {
-    font-size: 38px;
+    font-size: 46px;
   }
   .hero-copy {
     left: 30px;
     top: 35px;
   }
-  .hero-copy p {
-    font-size: 11px;
-  }
   .hero-copy .eyebrow {
-    font-size: 8px;
+    font-size: 14.5px;
     letter-spacing: 1.3px;
-  }
-  .hero-copy .explore-button {
-    font-size: 10px;
-    padding-left: 17px;
-    gap: 22px;
-  }
-  .hero-copy .explore-button > span {
-    width: 30px;
-    height: 30px;
   }
   .building-label {
     padding: 7px 9px 7px 7px;
@@ -1540,13 +1513,11 @@ kbd {
   .brand {
     font-size: 23px;
     gap: 8px;
-    letter-spacing: -1.2px;
+    letter-spacing: -0.8px;
   }
   .brand-mark {
-    transform: scale(0.78) skewY(-13deg);
-    margin-left: -3px;
-    margin-right: -3px;
     width: 29px;
+    height: 29px;
   }
   .site-header nav {
     gap: 13px;
@@ -1569,7 +1540,7 @@ kbd {
     top: 29px;
   }
   .hero-copy h1 {
-    font-size: 31px;
+    font-size: 39px;
     letter-spacing: -1.3px;
     margin: 18px 0 14px;
   }
@@ -1594,27 +1565,13 @@ kbd {
     width: 13px;
     height: 13px;
   }
-  .hero-copy p {
-    font-size: 10px;
-    line-height: 1.8;
-    margin-bottom: 17px;
-  }
   .hero-copy .eyebrow {
-    font-size: 6.8px;
+    font-size: 13.2px;
     gap: 6px;
     letter-spacing: 1.1px;
   }
   .tiny-cross {
-    font-size: 14px;
-  }
-  .hero-copy .explore-button {
-    font-size: 9px;
-    padding: 7px 7px 7px 15px;
-    gap: 18px;
-  }
-  .hero-copy .explore-button > span {
-    width: 27px;
-    height: 27px;
+    font-size: 21px;
   }
   .building-label {
     padding: 6px 8px;
@@ -1983,11 +1940,10 @@ kbd {
     top: 20px;
   }
   .hero-copy h1 {
-    font-size: 28px;
+    font-size: 36px;
     margin: 12px 0;
     letter-spacing: -1px;
   }
-  .hero-copy p,
   .minimap {
     display: none;
   }

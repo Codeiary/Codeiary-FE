@@ -8,7 +8,7 @@ const router = createRouter({
       path: "/",
       name: "city",
       component: () => import("./CityApp.vue"),
-      meta: { title: "Codeiary — Commit to better." },
+      meta: { title: "Codeiary — Code Diary" },
     },
     {
       path: "/admin/login",

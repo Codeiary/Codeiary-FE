@@ -2,6 +2,8 @@
 import { ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import Icon from "../components/Icon.vue";
+import BrandLogo from "../components/BrandLogo.vue";
+import ThemeToggle from "../components/ThemeToggle.vue";
 import { signInDemoAdmin } from "../auth/admin";
 
 const router = useRouter();
@@ -25,9 +27,9 @@ async function enterPreview() {
 <template>
   <main class="admin-shell admin-entry">
     <RouterLink to="/" class="brand admin-brand" aria-label="Codeiary 홈으로">
-      <span class="brand-mark"><i></i><i></i><i></i></span>
-      <span>codeiary<span class="brand-period">.</span></span>
+      <BrandLogo />
     </RouterLink>
+    <ThemeToggle class="admin-entry-theme" />
     <section class="admin-entry-card" aria-labelledby="admin-entry-title">
       <span class="admin-kicker">BEHIND THE STORIES</span>
       <div class="admin-entry-art" aria-hidden="true">

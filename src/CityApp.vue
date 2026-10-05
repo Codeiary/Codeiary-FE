@@ -10,15 +10,18 @@ import {
 } from "vue";
 import { useRoute } from "vue-router";
 import Icon from "./components/Icon.vue";
+import BrandLogo from "./components/BrandLogo.vue";
+import ThemeToggle from "./components/ThemeToggle.vue";
+import { useTheme } from "./theme";
 import { places, type Destination } from "./city/places";
 import type { CityController } from "./city/world";
 import type { Point } from "./city/navigation";
 
 const route = useRoute();
+const { isDark: night } = useTheme();
 const canvas = ref<HTMLCanvasElement>();
 const ready = ref(false),
-  error = ref(false),
-  night = ref(false);
+  error = ref(false);
 const panel = ref<Destination | null>(null);
 const selectedArticle = ref<number | null>(null),
   selectedProject = ref<number | null>(null),
@@ -338,8 +341,7 @@ onBeforeUnmount(() => {
   <div class="app-shell" :class="{ 'is-night': night }">
     <header class="site-header">
       <button class="brand" aria-label="Codeiary 홈으로" @click="home">
-        <span class="brand-mark"><i></i><i></i><i></i></span
-        ><span>codeiary<span class="brand-period">.</span></span>
+        <BrandLogo />
       </button>
       <nav aria-label="메인 메뉴">
         <button
@@ -368,11 +370,8 @@ onBeforeUnmount(() => {
         <div class="eyebrow">
           <span class="tiny-cross">✳</span> LEARN. BUILD. DOCUMENT.
         </div>
-        <h1>Commit to<br /><span>better.</span></h1>
-        <p>Learn it. Build it. Write it down.</p>
-        <button class="explore-button" @click="startExplore">
-          Explore the neighborhood <span><Icon name="arrow" :size="20" /></span>
-        </button>
+        <h1>Code <br /><span>Diary</span></h1>
+        <p class="hero-subtitle">Wonseok’s Dev Story</p>
       </section>
       <div v-if="ready" class="building-labels">
         <button
@@ -410,15 +409,8 @@ onBeforeUnmount(() => {
           블로그 둘러보기 <Icon name="arrow" :size="16" />
         </button>
       </div>
-      <div class="world-tools" aria-label="도시 설정">
-        <button
-          :title="night ? '낮으로 전환' : '밤으로 전환'"
-          :aria-label="night ? '낮으로 전환' : '밤으로 전환'"
-          :aria-pressed="night"
-          @click="night = !night"
-        >
-          <Icon :name="night ? 'moon' : 'sun'" />
-        </button>
+      <div class="world-tools" aria-label="화면 모드">
+        <ThemeToggle />
       </div>
       <aside class="minimap" aria-label="동네 지도">
         <div class="map-content">

@@ -1,6 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { canWalk, findPath, type Point, type Obstacle } from "./navigation";
+import {
+  canWalk,
+  findPath,
+  WORLD_BOUNDS,
+  type Point,
+  type Obstacle,
+} from "./navigation";
 import { places, type Destination } from "./places";
 export interface CityHandlers {
   position: (point: Point) => void;
@@ -210,18 +216,6 @@ export function createCity(
     box(land, 49.6, 0.95, z, 0.22, 1.8, 0.22, "#f2eee0");
     box(land, 49.6, 1.5, z + 2, 0.18, 0.18, 4.3, "#f2eee0");
   }
-  for (let i = 0; i < 30; i++)
-    box(
-      land,
-      56 + (i % 5) * 5,
-      -1.32,
-      -44 + Math.floor(i / 5) * 16,
-      2.5,
-      0.02,
-      0.1,
-      "#c5dddd",
-      false,
-    );
   const roadColor = "#637879";
   box(land, -66, 0.26, 12, 232, 0.14, 8.5, roadColor, false);
   box(land, 14, 0.27, -3, 8.5, 0.14, 240, roadColor, false);
@@ -229,10 +223,10 @@ export function createCity(
   box(land, -66, 0.22, 17.5, 232, 0.3, 2.4, "#eee8d9", false);
   box(land, 8.5, 0.22, -3, 2.4, 0.3, 240, "#eee8d9", false);
   box(land, 19.5, 0.22, -3, 2.4, 0.3, 240, "#eee8d9", false);
-  for (let x = -179; x < 48; x += 5)
+  for (let x = WORLD_BOUNDS.minX; x < WORLD_BOUNDS.maxX; x += 5)
     if (Math.abs(x - 14) > 7)
       box(land, x, 0.345, 12, 2.6, 0.02, 0.13, "#eddfb7", false);
-  for (let z = -117; z < 115; z += 5)
+  for (let z = WORLD_BOUNDS.minZ; z < WORLD_BOUNDS.maxZ; z += 5)
     if (Math.abs(z - 12) > 7)
       box(land, 14, 0.36, z, 0.13, 0.02, 2.6, "#eddfb7", false);
   // Zebra crossings at the intersection.
