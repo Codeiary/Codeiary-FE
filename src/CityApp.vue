@@ -370,7 +370,8 @@ onBeforeUnmount(() => {
       <div class="board-grain"></div>
       <section class="hero-copy">
         <div class="eyebrow">
-          <span class="tiny-cross">✳</span> LEARN. BUILD. DOCUMENT.
+          <Icon name="asterisk" class="tiny-cross" :size="25" /> LEARN. BUILD.
+          DOCUMENT.
         </div>
         <h1>Code <br /><span>Diary</span></h1>
         <p class="hero-subtitle">Wonseok’s Dev Story</p>

@@ -196,6 +196,8 @@ svg {
   letter-spacing: 1.8px;
 }
 .tiny-cross {
+  width: 1em;
+  height: 1em;
   color: #7b9176;
   font-size: 25px;
   line-height: 1;

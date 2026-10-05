@@ -96,6 +96,9 @@ withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 });
     <template v-else-if="name === 'map'">
       <path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5ZM9 3v16M15 5v16" />
     </template>
+    <template v-else-if="name === 'asterisk'">
+      <path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5" />
+    </template>
     <template v-else-if="name === 'spark'">
       <path
         d="m12 2 2.8 7.2L22 12l-7.2 2.8L12 22l-2.8-7.2L2 12l7.2-2.8L12 2Z"
