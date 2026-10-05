@@ -12,6 +12,7 @@ import { useRoute } from "vue-router";
 import Icon from "./components/Icon.vue";
 import BrandLogo from "./components/BrandLogo.vue";
 import ThemeToggle from "./components/ThemeToggle.vue";
+import AccountActions from "./components/AccountActions.vue";
 import { useTheme } from "./theme";
 import { places, type Destination } from "./city/places";
 import type { CityController } from "./city/world";
@@ -294,6 +295,7 @@ function releaseKeys() {
 watch(night, (value) => city?.setNight(value));
 watch(panel, (value) => city?.setPaused(Boolean(value)));
 onMounted(async () => {
+  if (route.query.access === "denied") notify("관리자만 접근할 수 있어요.");
   const view = route.query.view;
   if (view === "blog" || view === "portfolio" || view === "news")
     openPanel(view);
@@ -354,7 +356,7 @@ onBeforeUnmount(() => {
         </button>
       </nav>
       <div class="header-right">
-        <span class="live-indicator"><i></i> OPEN FOR EXPLORATION</span>
+        <AccountActions />
       </div>
     </header>
     <main class="city-board" aria-label="Codeiary 3D 도시">

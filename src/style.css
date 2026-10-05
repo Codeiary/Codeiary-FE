@@ -130,22 +130,6 @@ svg {
   align-items: center;
   gap: 25px;
 }
-.live-indicator {
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 1.1px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-.live-indicator i {
-  width: 5px;
-  height: 5px;
-  background: #83a26b;
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px #7e986811;
-}
 .city-board {
   height: calc(100% - 80px);
   position: relative;
@@ -1408,9 +1392,6 @@ kbd {
   .site-header nav {
     gap: 24px;
   }
-  .live-indicator {
-    display: none;
-  }
   .hero-copy {
     left: 38px;
     top: 47px;
@@ -1487,9 +1468,6 @@ kbd {
   }
   .window-heading h2 {
     font-size: 27px;
-  }
-  .header-right {
-    display: none;
   }
   .site-header nav {
     margin-left: auto;
@@ -1959,5 +1937,51 @@ kbd {
     animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Keep account actions available while preserving the full-height city on small screens. */
+@media (max-width: 900px) {
+  .site-header {
+    gap: 22px;
+    padding-inline: 24px;
+  }
+  .site-header nav {
+    gap: 20px;
+    margin-left: 0;
+  }
+}
+@media (max-width: 600px) {
+  .site-header {
+    height: 106px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: 62px 44px;
+    gap: 0 12px;
+    padding-inline: 20px;
+  }
+  .site-header > .brand {
+    justify-self: start;
+  }
+  .site-header > .header-right {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .site-header nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    gap: 26px;
+    margin: 0;
+    width: 100%;
+    border-top: 1px solid var(--theme-border);
+  }
+  .site-header nav button {
+    font-size: 12px;
+  }
+  .site-header .nav-new {
+    top: 11px;
+  }
+  .city-board {
+    height: calc(100% - 106px);
   }
 }
