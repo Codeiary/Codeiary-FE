@@ -1,0 +1,30 @@
+<template>
+  <svg class="brand-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+    <rect
+      x="3"
+      y="3"
+      width="30"
+      height="30"
+      rx="7"
+      fill="#ffffff"
+      stroke="#dededb"
+    />
+    <path d="M11 4v28" stroke="#dededb" stroke-width="1.5" />
+    <path d="M23 3v9l3-2 3 2V3" fill="#dd805b" />
+    <text
+      x="21.5"
+      y="27"
+      text-anchor="middle"
+      fill="#888888"
+      font-family="Georgia, 'Times New Roman', serif"
+      font-size="21"
+      font-style="italic"
+      font-weight="400"
+    >
+      d
+    </text>
+  </svg>
+  <span class="brand-wordmark"
+    >codeiary<span class="brand-period">.</span></span
+  >
+</template>
