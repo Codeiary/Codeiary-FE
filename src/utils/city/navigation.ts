@@ -1,11 +1,16 @@
 export type Point = { x: number; z: number };
 export type Obstacle = { x: number; z: number; width: number; depth: number };
 
-export const WORLD_BOUNDS = { minX: -47, maxX: 43, minZ: -43, maxZ: 36 };
+export const WORLD_BOUNDS = { minX: -47, maxX: 43, minZ: -43, maxZ: 43 };
 export const PLAYER_RADIUS = 1.1;
+export type WorldBounds = typeof WORLD_BOUNDS;
 
-export function canWalk(point: Point, obstacles: Obstacle[]) {
-  const b = WORLD_BOUNDS;
+export function canWalk(
+  point: Point,
+  obstacles: Obstacle[],
+  bounds: WorldBounds = WORLD_BOUNDS,
+) {
+  const b = bounds;
   if (
     point.x < b.minX ||
     point.x > b.maxX ||
@@ -25,6 +30,7 @@ export function findPath(
   start: Point,
   end: Point,
   obstacles: Obstacle[],
+  bounds: WorldBounds = WORLD_BOUNDS,
 ): Point[] {
   const step = 1.5;
   const grid = (p: Point) => ({
@@ -42,6 +48,7 @@ export function findPath(
         !canWalk(
           { x: a.x + (b.x - a.x) * fraction, z: a.z + (b.z - a.z) * fraction },
           obstacles,
+          bounds,
         )
       )
         return false;
@@ -107,12 +114,16 @@ export function findPath(
         const nextKey = key(next);
         if (closed.has(nextKey)) continue;
         const physical = { x: next.x * step, z: next.z * step };
-        if (!canWalk(physical, obstacles)) continue;
+        if (!canWalk(physical, obstacles, bounds)) continue;
         if (
           dx &&
           dz &&
-          (!canWalk({ x: current.x * step, z: physical.z }, obstacles) ||
-            !canWalk({ x: physical.x, z: current.z * step }, obstacles))
+          (!canWalk(
+            { x: current.x * step, z: physical.z },
+            obstacles,
+            bounds,
+          ) ||
+            !canWalk({ x: physical.x, z: current.z * step }, obstacles, bounds))
         )
           continue;
         const cost = score.get(key(current))! + Math.hypot(dx, dz);
