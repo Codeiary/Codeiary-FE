@@ -1,21 +1,37 @@
 <script setup lang="ts">
+import { displayName } from "@/utils/profile/display-name";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "@/components/Icon.vue";
 import PostCard from "@/components/blog/PostCard.vue";
 import type { BlogPost } from "@/utils/blog/posts";
 import type { HomeEntry, HomeProfile } from "@/utils/profile/mock-home";
+import { residenceTier, type HouseLevel } from "@/utils/city/residence-tiers";
 
-const props = defineProps<{ profile: HomeProfile; posts: BlogPost[] }>();
+const props = withDefaults(
+  defineProps<{
+    profile: HomeProfile;
+    posts: BlogPost[];
+    own?: boolean;
+    postCount?: number;
+    level?: HouseLevel;
+    activityPoints?: number | null;
+  }>(),
+  { own: true, level: 0, activityPoints: null },
+);
 defineEmits<{ blog: []; post: [post: BlogPost] }>();
 type Section = "blog" | "portfolio" | "issues";
 const section = ref<Section>("blog");
 const selected = ref<HomeEntry>();
 const tabButtons = ref<HTMLButtonElement[]>([]);
 const tabs = computed(() => [
-  { id: "blog" as const, label: "내 블로그", count: props.posts.length },
+  {
+    id: "blog" as const,
+    label: props.own ? "내 블로그" : "블로그",
+    count: props.posts.length,
+  },
   {
     id: "portfolio" as const,
-    label: "내 포트폴리오",
+    label: props.own ? "내 포트폴리오" : "포트폴리오",
     count: props.profile.projects.length,
   },
   {
@@ -56,12 +72,21 @@ watch(
     <div class="home-layout">
       <aside class="home-profile" aria-label="프로필과 연락처">
         <div class="home-avatar" aria-hidden="true">
-          {{ profile.owner.name.slice(0, 1) }}
+          {{ displayName(profile.owner).slice(0, 1) }}
           <span><Icon name="home" :size="16" /></span>
         </div>
-        <h3>{{ profile.owner.name }}</h3>
+        <h3>{{ displayName(profile.owner) }}</h3>
+        <div v-if="postCount !== undefined" class="home-growth">
+          <span
+            >Lv. {{ level }}<i>{{ residenceTier(level).name }}</i></span
+          >
+          <small v-if="activityPoints !== null"
+            >활동 {{ activityPoints.toLocaleString() }} P</small
+          >
+        </div>
         <div class="home-contacts">
           <a
+            v-if="profile.github"
             :href="profile.github"
             target="_blank"
             rel="noopener noreferrer"
@@ -76,7 +101,11 @@ watch(
             >
             <Icon name="arrow" :size="13" />
           </a>
-          <a :href="`mailto:${profile.email}`" class="home-contact">
+          <a
+            v-if="profile.email"
+            :href="`mailto:${profile.email}`"
+            class="home-contact"
+          >
             <Icon name="mail" :size="18" />
             <span
               ><small>이메일</small><span>{{ profile.email }}</span></span
@@ -85,7 +114,11 @@ watch(
         </div>
       </aside>
       <div class="home-main">
-        <div class="home-tabs" role="tablist" aria-label="나의 콘텐츠">
+        <div
+          class="home-tabs"
+          role="tablist"
+          :aria-label="`${displayName(profile.owner)}의 콘텐츠`"
+        >
           <button
             v-for="(tab, index) in tabs"
             :id="`home-tab-${tab.id}`"
@@ -127,7 +160,8 @@ watch(
               <Icon name="book" :size="28" />
               <p>아직 작성한 글이 없어요.</p>
               <button @click="$emit('blog')">
-                내 블로그로 이동 <Icon name="arrow-right" :size="15" />
+                {{ own ? "내 블로그로 이동" : "블로그로 이동" }}
+                <Icon name="arrow-right" :size="15" />
               </button>
             </div>
           </template>
@@ -174,6 +208,29 @@ watch(
     </div>
   </div>
 </template>
+
+<style scoped>
+.home-growth {
+  margin: 0 0 24px;
+}
+.home-growth > span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--font-size-min);
+  font-weight: 600;
+}
+.home-growth i {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--theme-muted);
+  font-style: normal;
+}
+.home-growth small {
+  font-size: 13px;
+  color: var(--theme-muted);
+}
+</style>
 
 <style scoped>
 .user-home {
@@ -419,6 +476,10 @@ watch(
   }
 }
 @media (max-width: 760px) {
+  .home-growth {
+    grid-column: 1 / -1;
+    margin-top: 16px;
+  }
   .home-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: 28px;
