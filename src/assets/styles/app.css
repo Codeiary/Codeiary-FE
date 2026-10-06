@@ -1,6 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700;750;800;850&family=Noto+Sans+KR:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 :root {
   --font-size-min: 15px;
+  --city-mobile-label-font-size: 8px;
   font-family: "DM Sans", "Noto Sans KR", sans-serif;
   color: #303d35;
   background: #f4f2ea;
@@ -197,65 +198,6 @@ svg {
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.6' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-.hero-copy {
-  position: absolute;
-  left: 58px;
-  top: 62px;
-  pointer-events: none;
-  z-index: 4;
-}
-.hero-copy::before {
-  content: "";
-  position: absolute;
-  inset: -25px -30px -20px -35px;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse at 32% 38%,
-    #f4efe6f2 0%,
-    #f4efe6d9 38%,
-    #f4efe66b 64%,
-    transparent 82%
-  );
-  filter: blur(15px);
-}
-.eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #677366;
-  font-size: 16.6px;
-  font-weight: 650;
-  letter-spacing: 1.8px;
-}
-.tiny-cross {
-  width: 1em;
-  height: 1em;
-  color: #7b9176;
-  font-size: 25px;
-  line-height: 1;
-}
-.hero-copy h1 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-style: italic;
-  font-size: clamp(44px, calc(3.4vw + 6px), 57px);
-  line-height: 1.08;
-  letter-spacing: -1.5px;
-  font-weight: 400;
-  margin: 18px 0 15px;
-}
-.hero-copy h1 span {
-  color: #d67c57;
-  letter-spacing: inherit;
-}
-.hero-subtitle {
-  margin: 0;
-  color: #747a6a;
-  font-size: 18.75px;
-  font-style: normal;
-  font-weight: 450;
-  line-height: 1.6;
-}
 .explore-button {
   display: inline-flex;
   align-items: center;
@@ -400,29 +342,7 @@ svg {
   margin: 4px 6px;
   background: #dce0cf;
 }
-.minimap {
-  position: absolute;
-  left: 36px;
-  bottom: 28px;
-  width: 210px;
-  padding: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  z-index: 6;
-  box-shadow: 0 4px 18px #3f4f3826;
-}
-.map-svg {
-  width: 100%;
-  display: block;
-  height: auto;
-}
-.map-place {
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-.map-place:hover {
-  opacity: 0.65;
-}
+
 .player-dot {
   width: 5px;
   height: 5px;
@@ -520,9 +440,6 @@ kbd {
 .contributor-link > svg:last-child {
   margin-left: 3px;
 }
-.mobile-controls {
-  display: none;
-}
 .toast-message {
   position: absolute;
   left: 50%;
@@ -606,25 +523,6 @@ kbd {
 }
 .is-night .city-board {
   background: linear-gradient(140deg, #253446, #344b55 55%, #426364);
-}
-.is-night .hero-copy h1 {
-  color: #e9e6d2;
-}
-.is-night .hero-copy::before {
-  background: radial-gradient(
-    ellipse at 32% 38%,
-    #293e4cf2 0%,
-    #293e4cd9 38%,
-    #293e4c6b 64%,
-    transparent 82%
-  );
-}
-.is-night .hero-copy h1 span {
-  color: #e59a72;
-}
-.is-night .eyebrow,
-.is-night .hero-subtitle {
-  color: #b7bfae;
 }
 .is-night .world-signature {
   color: #c3cbb3;
@@ -1348,18 +1246,6 @@ kbd {
   }
 }
 @media (min-width: 1650px) {
-  .hero-copy {
-    top: 85px;
-    left: 75px;
-  }
-  .hero-copy h1 {
-    font-size: 61px;
-  }
-  .minimap {
-    width: 255px;
-    left: 50px;
-    bottom: 37px;
-  }
   .world-signature {
     bottom: 44px;
     right: 50px;
@@ -1380,22 +1266,11 @@ kbd {
   .site-header nav {
     gap: 24px;
   }
-  .hero-copy {
-    left: 38px;
-    top: 47px;
-  }
-  .hero-copy h1 {
-    font-size: 51px;
-  }
   .world-signature {
     bottom: 36px;
     right: 24px;
   }
-  .minimap {
-    left: 24px;
-    bottom: 24px;
-    width: 180px;
-  }
+
   .control-dock {
     left: 50%;
     right: auto;
@@ -1408,17 +1283,6 @@ kbd {
   }
 }
 @media (max-width: 900px) {
-  .hero-copy h1 {
-    font-size: 46px;
-  }
-  .hero-copy {
-    left: 30px;
-    top: 35px;
-  }
-  .hero-copy .eyebrow {
-    font-size: 14.5px;
-    letter-spacing: 1.3px;
-  }
   .building-label {
     padding: 7px 9px 7px 7px;
     gap: 7px;
@@ -1444,9 +1308,7 @@ kbd {
   .optional-control {
     display: none;
   }
-  .minimap {
-    width: 170px;
-  }
+
   .window-body,
   .article-body {
     padding: 30px 30px 0;
@@ -1491,18 +1353,6 @@ kbd {
     width: 3px;
     height: 3px;
   }
-  .hero-copy {
-    left: 24px;
-    top: 29px;
-  }
-  .hero-copy h1 {
-    font-size: 39px;
-    letter-spacing: -1.3px;
-    margin: 18px 0 14px;
-  }
-  .hero-copy h1 span {
-    letter-spacing: inherit;
-  }
   .world-signature {
     right: 20px;
     bottom: 25px;
@@ -1520,14 +1370,6 @@ kbd {
   .contributor-link > svg:first-child {
     width: 13px;
     height: 13px;
-  }
-  .hero-copy .eyebrow {
-    font-size: 13.2px;
-    gap: 6px;
-    letter-spacing: 1.1px;
-  }
-  .tiny-cross {
-    font-size: 21px;
   }
   .building-label {
     padding: 6px 8px;
@@ -1556,8 +1398,9 @@ kbd {
     bottom: -12px;
   }
   .world-tools {
-    right: 15px;
-    top: 37%;
+    left: 16px;
+    right: auto;
+    top: 14px;
     padding: 3px;
     border-radius: 6px;
     gap: 2px;
@@ -1573,12 +1416,7 @@ kbd {
   .world-tools > span {
     margin: 2px 4px;
   }
-  .minimap {
-    bottom: 24px;
-    left: 18px;
-    width: 138px;
-    border-radius: 5px;
-  }
+
   .control-dock {
     display: none;
   }
@@ -1597,47 +1435,6 @@ kbd {
   }
   .control-dock .control-item:last-child {
     display: none;
-  }
-  .mobile-controls {
-    display: grid;
-    position: absolute;
-    right: 20px;
-    bottom: 78px;
-    grid-template-columns: 34px 34px 34px;
-    grid-template-rows: 34px 34px;
-    gap: 4px;
-    z-index: 7;
-  }
-  .mobile-controls button {
-    height: 34px;
-    width: 34px;
-    background: #faf8ede8;
-    border: 1px solid #fffdf4;
-    border-bottom: 2px solid #cfdbc1;
-    border-radius: 5px;
-    font-size: 16px;
-    color: #748765;
-    touch-action: none;
-    user-select: none;
-  }
-  .mobile-controls button:active {
-    background: #dbddc8;
-  }
-  .touch-up {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .touch-left {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  .touch-down {
-    grid-column: 2;
-    grid-row: 2;
-  }
-  .touch-right {
-    grid-column: 3;
-    grid-row: 2;
   }
   .toast-message {
     max-width: calc(100% - 32px);
@@ -1850,17 +1647,6 @@ kbd {
   }
 }
 @media (max-height: 550px) {
-  .hero-copy {
-    top: 20px;
-  }
-  .hero-copy h1 {
-    font-size: 36px;
-    margin: 12px 0;
-    letter-spacing: -1px;
-  }
-  .minimap {
-    display: none;
-  }
   .world-tools {
     top: 25%;
   }
