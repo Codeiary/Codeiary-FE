@@ -37,7 +37,7 @@
   padding: 34px 0;
 }
 .admin-placeholder h1 {
-  font-size: 28px;
+  font-size: var(--mobile-page-title-size, 28px);
   font-weight: 550;
   letter-spacing: -1px;
   margin: 0 0 16px;

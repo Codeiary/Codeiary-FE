@@ -412,7 +412,7 @@
   overflow: hidden;
   min-height: 2.9em;
   margin: 8px 0 6px;
-  font-size: 15px;
+  font-size: var(--font-size-min);
   line-height: 1.5;
   letter-spacing: -0.6px;
   overflow-wrap: anywhere;
@@ -566,6 +566,6 @@
     padding-inline: 0;
   }
   .blog .blog-empty-state h3 {
-    font-size: 18px;
+    font-size: var(--mobile-section-title-size, 18px);
   }
 }

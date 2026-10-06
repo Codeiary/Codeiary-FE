@@ -201,7 +201,7 @@ function scrollToHeading(id: string) {
 }
 @media (max-width: 600px) {
   .post-article .article-header .article-title {
-    font-size: 29px;
+    font-size: var(--mobile-page-title-size, 29px);
     letter-spacing: -1.4px;
   }
 }

@@ -168,7 +168,7 @@ defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
     border-radius: 9px;
   }
   .post-card-compact .post-content h3 {
-    font-size: 16px;
+    font-size: var(--mobile-item-title-size, 16px);
   }
   .post-card-compact .post-content p {
     font-size: var(--font-size-min);

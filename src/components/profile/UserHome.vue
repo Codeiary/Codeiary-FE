@@ -221,13 +221,13 @@ watch(
   font-weight: 600;
 }
 .home-growth i {
-  font-size: 14px;
+  font-size: var(--mobile-item-title-size, 14px);
   font-weight: 400;
   color: var(--theme-muted);
   font-style: normal;
 }
 .home-growth small {
-  font-size: 13px;
+  font-size: var(--mobile-item-title-size, 13px);
   color: var(--theme-muted);
 }
 </style>
@@ -408,7 +408,7 @@ watch(
   gap: 8px;
 }
 .home-entry-copy strong {
-  font-size: 16px;
+  font-size: var(--mobile-item-title-size, 16px);
   font-weight: 650;
   line-height: 1.5;
   letter-spacing: -0.3px;
@@ -465,7 +465,7 @@ watch(
   font-size: var(--font-size-min);
 }
 .home-entry-detail p {
-  font-size: 15px;
+  font-size: var(--font-size-min);
   line-height: 1.9;
   margin-bottom: 18px;
 }
@@ -499,7 +499,7 @@ watch(
   .home-profile h3 {
     margin: 0;
     align-self: center;
-    font-size: 20px;
+    font-size: var(--mobile-section-title-size, 20px);
   }
   .home-contacts {
     grid-column: 1 / -1;
@@ -529,13 +529,13 @@ watch(
     border-radius: 12px;
   }
   .home-entry-copy strong {
-    font-size: 15px;
+    font-size: var(--font-size-min);
   }
   .home-entry-description {
     font-size: var(--font-size-min);
   }
   .home-entry-detail h3 {
-    font-size: 23px;
+    font-size: var(--mobile-page-title-size, 23px);
   }
 }
 </style>

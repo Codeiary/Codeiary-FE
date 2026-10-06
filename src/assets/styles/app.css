@@ -1324,6 +1324,12 @@ kbd {
   }
 }
 @media (max-width: 600px) {
+  :root {
+    --font-size-min: 12px;
+    --mobile-page-title-size: 20px;
+    --mobile-section-title-size: 16px;
+    --mobile-item-title-size: 14px;
+  }
   .app-shell {
     min-height: 0;
   }
@@ -1461,7 +1467,7 @@ kbd {
     margin-bottom: 24px;
   }
   .window-heading h2 {
-    font-size: 23px;
+    font-size: var(--mobile-page-title-size);
     letter-spacing: -1.4px;
   }
   .window-heading p {
@@ -1526,7 +1532,7 @@ kbd {
     font-size: var(--font-size-min);
   }
   .article-body h2 {
-    font-size: 27px;
+    font-size: var(--mobile-page-title-size);
     letter-spacing: -1.4px;
   }
   .article-body .article-lead {
@@ -1536,7 +1542,7 @@ kbd {
     font-size: var(--font-size-min);
   }
   .article-body h3 {
-    font-size: 17px;
+    font-size: var(--mobile-section-title-size);
   }
   .article-illustration {
     height: 190px;
@@ -1566,7 +1572,7 @@ kbd {
     padding: 20px 23px;
   }
   .project-information h3 {
-    font-size: 25px;
+    font-size: var(--mobile-section-title-size);
   }
   .project-information p {
     font-size: var(--font-size-min);
@@ -1585,7 +1591,7 @@ kbd {
     padding: 23px;
   }
   .news-feature h3 {
-    font-size: 27px;
+    font-size: var(--mobile-page-title-size);
   }
   .news-feature-symbol {
     font-size: 103px;
@@ -1597,7 +1603,7 @@ kbd {
     padding: 23px 0;
   }
   .news-number {
-    font-size: 18px;
+    font-size: var(--mobile-item-title-size);
   }
   .news-card h3 {
     font-size: var(--font-size-min);
@@ -1667,7 +1673,8 @@ kbd {
   display: none;
 }
 @media (max-width: 900px) {
-  .site-header {
+  .site-header,
+  .site-header.site-header-content {
     justify-content: space-between;
     --navigation-font-size: 12px;
     --account-font-size: 11px;

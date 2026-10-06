@@ -75,13 +75,13 @@
     padding: 28px 22px 36px;
   }
   .content-window .article-body h2 {
-    font-size: 29px;
+    font-size: var(--mobile-page-title-size, 29px);
   }
   .content-window .article-body p {
-    font-size: 15px;
+    font-size: var(--font-size-min);
   }
   .content-window .article-body .article-lead {
-    font-size: 17px;
+    font-size: var(--mobile-item-title-size, 17px);
   }
   .content-window .article-illustration {
     height: 220px;
