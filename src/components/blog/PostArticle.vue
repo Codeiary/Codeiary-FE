@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from "@/utils/profile/display-name";
 import { defineAsyncComponent, ref } from "vue";
 import Icon from "@/components/Icon.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
@@ -100,10 +101,12 @@ function scrollToHeading(id: string) {
           v-if="post.author"
           class="blog-author-link"
           :aria-label="
-            interactive ? `${post.author.name}의 블로그 보기` : undefined
+            interactive
+              ? `${displayName(post.author)}의 블로그 보기`
+              : undefined
           "
           @click="interactive && $emit('selectAuthor', post.author)"
-          >{{ post.author.name }}</component
+          >{{ displayName(post.author) }}</component
         >
         <span v-else>작성자 정보 없음</span>
         <span>·</span>{{ post.date }}

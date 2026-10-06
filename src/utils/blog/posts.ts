@@ -4,6 +4,7 @@ export type PostVisibility = "PUBLIC" | "PRIVATE";
 export interface BlogAuthor {
   id: number | `demo-${string}`;
   name: string;
+  nickname?: string | null;
 }
 
 export interface BlogPost {

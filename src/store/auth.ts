@@ -7,6 +7,7 @@ export interface UserProfile {
   id: number;
   email: string;
   name: string;
+  nickname?: string | null;
   role: "ADMIN" | "USER";
 }
 
@@ -103,7 +104,8 @@ export function createAuthSession(
       );
     }
     const currentRevision = revision;
-    refreshRequest = api.post<TokenResponse>("/auth/refresh", { refreshToken })
+    refreshRequest = api
+      .post<TokenResponse>("/auth/refresh", { refreshToken })
       .then((tokens) => {
         if (currentRevision === revision) acceptTokens(tokens);
       })

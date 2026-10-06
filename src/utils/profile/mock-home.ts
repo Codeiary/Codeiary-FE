@@ -23,7 +23,7 @@ export interface HomeProfile {
 export function createMockHome(user: UserProfile | null): HomeProfile {
   return {
     owner: user
-      ? { id: user.id, name: user.name }
+      ? { id: user.id, name: user.name, nickname: user.nickname }
       : { id: "demo-codeiary", name: "Codeiary" },
     email: user?.email ?? "dnjstjt1297@gmail.com",
     github: "https://github.com/dnjstjt1297",
