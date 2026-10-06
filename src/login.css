@@ -2,7 +2,7 @@
   --login-muted: #7d7c71;
   --login-ink: #393c35;
   --login-paper: #f4f0e5;
-  min-height: 100svh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   color: var(--theme-text);
@@ -27,10 +27,11 @@
   gap: 28px;
 }
 .login-home {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   color: var(--theme-muted) !important;
 }
 .login-home:hover {
@@ -38,10 +39,9 @@
 }
 .login-main {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   flex: 1;
-  width: min(1440px, 100%);
-  margin: 0 auto;
+  width: 100%;
 }
 .login-story {
   position: relative;
@@ -57,7 +57,7 @@
   align-items: center;
   gap: 10px;
   color: var(--login-muted);
-  font-size: 9px;
+  font-size: var(--font-size-min);
   letter-spacing: 1.8px;
   font-weight: 600;
 }
@@ -83,7 +83,7 @@
 .login-story-copy {
   margin: 0;
   color: var(--login-muted);
-  font-size: 12px;
+  font-size: var(--font-size-min);
   line-height: 1.8;
 }
 .diary-art {
@@ -179,18 +179,18 @@
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
 }
 .diary-edition {
-  font-size: 5px;
-  letter-spacing: 1.2px;
+  font-size: var(--font-size-min);
+  letter-spacing: 0;
   align-self: flex-start;
   margin-top: 13px;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 .diary-monogram {
   display: flex;
   align-items: baseline;
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 125px;
+  font-size: 104px;
   line-height: 1.05;
   letter-spacing: -7px;
   color: #666862;
@@ -207,15 +207,16 @@
   border-top: 1px solid #d3c9b4;
   padding-top: 12px;
   align-items: center;
+  gap: 8px;
 }
 .diary-cover-bottom > span:first-child {
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 13px;
+  font-size: var(--font-size-min);
 }
 .diary-cover-bottom > span:last-child {
-  font-size: 5px;
-  letter-spacing: 1px;
+  font-size: var(--font-size-min);
+  white-space: nowrap;
 }
 .diary-spark {
   position: absolute;
@@ -246,7 +247,7 @@
   transform: rotate(-7deg);
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 14px;
+  font-size: var(--font-size-min);
   color: #8d8775;
 }
 .diary-note svg {
@@ -257,10 +258,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   border-top: 1px solid #b8af942f;
   padding-top: 19px;
   color: var(--login-muted);
-  font-size: 8px;
+  font-size: var(--font-size-min);
   letter-spacing: 1.5px;
 }
 .login-form-section {
@@ -276,7 +279,7 @@
   align-items: center;
   gap: 8px;
   color: var(--theme-accent);
-  font-size: 10px;
+  font-size: var(--font-size-min);
   letter-spacing: 2px;
   font-weight: 650;
 }
@@ -299,7 +302,7 @@
 }
 .login-intro {
   color: var(--theme-muted);
-  font-size: 12px;
+  font-size: var(--font-size-min);
   margin: 0 0 36px;
   line-height: 1.8;
 }
@@ -308,7 +311,7 @@
 }
 .login-field label {
   display: block;
-  font-size: 12px;
+  font-size: var(--font-size-min);
   font-weight: 550;
   margin-bottom: 10px;
 }
@@ -341,14 +344,14 @@
   background: transparent;
   border: 0;
   color: var(--theme-text);
-  font-size: 13px;
+  font-size: var(--font-size-min);
   border-radius: 5px;
   outline: none;
 }
 .login-input-wrap input::placeholder {
   color: var(--theme-muted);
   opacity: 0.75;
-  font-size: 12px;
+  font-size: var(--font-size-min);
 }
 .password-visibility {
   align-self: stretch;
@@ -364,7 +367,7 @@
 }
 .login-field-error {
   color: #a65037;
-  font-size: 11px;
+  font-size: var(--font-size-min);
   line-height: 1.7;
   margin: 8px 0 0;
 }
@@ -378,7 +381,7 @@
   background: #bc6544;
   color: #fffaf6;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--font-size-min);
   font-weight: 600;
   margin-top: 31px;
   transition:
@@ -400,7 +403,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--font-size-min);
   line-height: 1.8;
   color: var(--theme-text);
   padding: 12px 14px;
@@ -441,7 +444,7 @@
 .login-browse-copy {
   text-align: center;
   color: var(--theme-muted);
-  font-size: 11px;
+  font-size: var(--font-size-min);
   margin: 0 0 10px;
 }
 .login-browse {
@@ -449,7 +452,7 @@
   justify-content: center;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-min);
   width: fit-content;
   margin: 0 auto;
   padding: 5px 0;
@@ -466,12 +469,12 @@
   gap: 18px;
   border-top: 1px solid var(--theme-border);
   color: var(--theme-muted);
-  font-size: 10px;
+  font-size: var(--font-size-min);
 }
 .login-footer > span:last-child {
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 12px;
+  font-size: var(--font-size-min);
 }
 :root[data-theme="dark"] .login-shell {
   --login-muted: #a6b0a8;
@@ -499,21 +502,6 @@
     transform: rotate(360deg);
   }
 }
-@media (min-width: 1440px) {
-  .login-main {
-    margin: 32px auto;
-    border: 1px solid var(--theme-border);
-    border-radius: 12px;
-    overflow: hidden;
-    flex: 0 1 auto;
-    min-height: min(720px, calc(100svh - 205px));
-    width: calc(100% - 120px);
-    max-width: 1300px;
-  }
-  .login-footer {
-    margin-top: auto;
-  }
-}
 @media (max-width: 1000px) {
   .login-story {
     padding: 48px 32px 24px;
@@ -525,7 +513,7 @@
     font-size: 55px;
   }
   .login-eyebrow {
-    font-size: 8px;
+    font-size: var(--font-size-min);
     letter-spacing: 1.4px;
   }
   .diary-art {
@@ -533,7 +521,7 @@
   }
   .diary-note {
     right: -10px;
-    font-size: 12px;
+    font-size: var(--font-size-min);
   }
 }
 @media (max-width: 760px) {
@@ -545,8 +533,7 @@
     gap: 18px;
   }
   .login-home {
-    font-size: 11px;
-    gap: 8px;
+    flex-shrink: 0;
   }
   .login-main {
     display: flex;
@@ -557,7 +544,7 @@
   }
   .login-form-section {
     flex: 1;
-    min-height: calc(100svh - 126px);
+    min-height: 0;
     padding: 56px 28px 48px;
     background: radial-gradient(ellipse at 100% 0%, #d67c570a, transparent 60%);
   }
@@ -569,13 +556,10 @@
   }
   .login-footer {
     padding: 16px 24px;
-    font-size: 9px;
+    font-size: var(--font-size-min);
   }
 }
 @media (max-width: 380px) {
-  .login-home {
-    display: none;
-  }
   .login-form-section {
     padding: 42px 24px;
   }
@@ -583,7 +567,7 @@
     font-size: 27px;
   }
   .login-footer > span:last-child {
-    font-size: 11px;
+    font-size: var(--font-size-min);
   }
 }
 @media (prefers-reduced-motion: reduce) {

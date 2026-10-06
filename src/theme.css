@@ -44,7 +44,6 @@
 .site-header,
 .admin-shell,
 .content-window,
-.window-topbar,
 .world-tools,
 .control-dock {
   transition:
@@ -61,10 +60,8 @@
   color: var(--theme-text);
 }
 :root[data-theme="dark"] .site-header nav button,
-:root[data-theme="dark"] .window-topbar > span:nth-child(2),
 :root[data-theme="dark"] .close-button,
 :root[data-theme="dark"] .control-item,
-:root[data-theme="dark"] .window-bottom-nav button,
 :root[data-theme="dark"] .window-footer,
 :root[data-theme="dark"] .demo-label,
 :root[data-theme="dark"] .post-footer,
@@ -82,7 +79,6 @@
 :root[data-theme="dark"] .site-header nav button:hover,
 :root[data-theme="dark"] .site-header nav button.active,
 :root[data-theme="dark"] .filter-tabs button.selected,
-:root[data-theme="dark"] .window-bottom-nav button.current,
 :root[data-theme="dark"] .section-kicker,
 :root[data-theme="dark"] .post-category,
 :root[data-theme="dark"] .project-type {
@@ -100,8 +96,6 @@
   border-color: var(--theme-border);
   color: var(--theme-text);
 }
-:root[data-theme="dark"] .window-topbar,
-:root[data-theme="dark"] .window-bottom-nav,
 :root[data-theme="dark"] .world-tools,
 :root[data-theme="dark"] .control-dock,
 :root[data-theme="dark"] .toast-message,
