@@ -1,0 +1,48 @@
+.markdown-content,
+.markdown-editor {
+  --syntax-keyword: #8e3c96;
+  --syntax-string: #34734a;
+  --syntax-number: #9c552a;
+  --syntax-function: #286da4;
+  --syntax-type: #846214;
+  --syntax-comment: #758071;
+}
+:root[data-theme="dark"] :is(.markdown-content, .markdown-editor) {
+  --syntax-keyword: #dfa5ec;
+  --syntax-string: #aad5a1;
+  --syntax-number: #edb18c;
+  --syntax-function: #91c9ef;
+  --syntax-type: #edd697;
+  --syntax-comment: #a5b5af;
+}
+.markdown-content
+  :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-meta) {
+  color: var(--syntax-keyword);
+}
+.markdown-content
+  :is(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-tag) {
+  color: var(--syntax-string);
+}
+.markdown-content
+  :is(.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-deletion) {
+  color: var(--syntax-number);
+}
+.markdown-content
+  :is(.hljs-title, .hljs-built_in, .hljs-attr, .hljs-selector-class) {
+  color: var(--syntax-function);
+}
+.markdown-content
+  :is(
+    .hljs-type,
+    .hljs-class,
+    .hljs-title.class_,
+    .hljs-name,
+    .hljs-attribute
+  ) {
+  color: var(--syntax-type);
+}
+.markdown-content :is(.hljs-comment, .hljs-quote, .hljs-doctag) {
+  color: var(--syntax-comment);
+  font-style: italic;
+  font-synthesis: style;
+}

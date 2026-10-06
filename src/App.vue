@@ -14,8 +14,12 @@ onBeforeUnmount(() =>
   document.removeEventListener("visibilitychange", checkSession),
 );
 watch(auth.user, (user) => {
-  if (!user && route.meta.requiresAdmin && !auth.signingOut.value) {
-    void router.replace({ name: "login", query: { redirect: "/admin" } });
+  if (
+    !user &&
+    (route.meta.requiresAdmin || route.meta.requiresAuth) &&
+    !auth.signingOut.value
+  ) {
+    void router.replace({ name: "login", query: { redirect: route.path } });
   }
 });
 </script>
@@ -36,6 +40,6 @@ watch(auth.user, (user) => {
   place-items: center;
   color: var(--theme-muted);
   background: var(--theme-surface);
-  font-size: 13px;
+  font-size: var(--font-size-min);
 }
 </style>

@@ -27,6 +27,12 @@ describe("인증 라우트", () => {
         { path: "/", name: "city", component },
         { path: "/login", name: "login", component },
         {
+          path: "/write/:draftId?",
+          name: "blog-write",
+          component,
+          meta: { requiresAuth: true },
+        },
+        {
           path: "/admin",
           name: "admin",
           component,
@@ -41,6 +47,21 @@ describe("인증 라우트", () => {
     const router = routerFixture();
     await router.push("/admin");
     expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/admin");
+    expect(auth.verifyAdmin).not.toHaveBeenCalled();
+  });
+  it("글쓰기 진입 시 로그인 후 편집 화면으로 돌아올 수 있다.", async () => {
+    const router = routerFixture();
+    await router.push("/write");
+    expect(router.currentRoute.value.name).toBe("login");
+    expect(router.currentRoute.value.query.redirect).toBe("/write");
+    expect(loginDestination("/write")).toBe("/write");
+    expect(loginDestination("/write//evil.example")).toBe("/");
+  });
+  it("일반 사용자도 글쓰기 화면에 접근할 수 있다.", async () => {
+    user.value = userFixture("USER");
+    const router = routerFixture();
+    await router.push("/write");
+    expect(router.currentRoute.value.name).toBe("blog-write");
     expect(auth.verifyAdmin).not.toHaveBeenCalled();
   });
   it("서버에서 승인한 관리자만 관리자 화면에 접근할 수 있다.", async () => {

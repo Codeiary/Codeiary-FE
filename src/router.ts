@@ -1,14 +1,16 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { authGuard } from "./auth/navigation";
+import { cityRoutes } from "./city/routes";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    ...cityRoutes,
     {
-      path: "/",
-      name: "city",
-      component: () => import("./CityApp.vue"),
-      meta: { title: "Codeiary — Code Diary" },
+      path: "/write/:draftId?",
+      name: "blog-write",
+      component: () => import("./pages/WritePage.vue"),
+      meta: { requiresAuth: true, title: "글쓰기 — Codeiary" },
     },
     {
       path: "/login",

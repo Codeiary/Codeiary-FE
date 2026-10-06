@@ -66,10 +66,10 @@ async function login() {
         ><BrandLogo
       /></RouterLink>
       <div class="login-header-actions">
-        <RouterLink to="/" class="login-home"
-          >동네로 돌아가기 <Icon name="arrow" :size="14"
-        /></RouterLink>
         <ThemeToggle />
+        <RouterLink to="/" class="login-home" aria-label="창 닫기">
+          <Icon name="close" :size="20" />
+        </RouterLink>
       </div>
     </header>
 
