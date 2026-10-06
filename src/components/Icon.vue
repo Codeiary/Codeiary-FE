@@ -14,7 +14,15 @@ withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 });
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <template v-if="name === 'menu'">
+    <template v-if="name === 'run'">
+      <circle cx="15.5" cy="4" r="2" />
+      <path d="m8 9 4-2 4 5h4M12 7l-2 7 5 3-1 5M10 14l-4 5H2" />
+    </template>
+    <template v-else-if="name === 'search'">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m16 16 5 5" />
+    </template>
+    <template v-else-if="name === 'menu'">
       <path d="M4 6h16M4 12h16M4 18h16" />
     </template>
     <template v-else-if="name === 'home'">
