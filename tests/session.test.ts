@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthError, createAuthSession, SESSION_KEY } from "@/store/auth";
 import {
-  credentials,
+  oauthCode,
   deferred,
   jsonResponse,
   storageFixture,
@@ -28,16 +28,16 @@ describe("JWT 로그인 세션", () => {
 
   async function login() {
     fetchMock.mockResolvedValueOnce(jsonResponse(tokenFixture()));
-    await session.login(credentials.email, credentials.password);
+    await session.exchangeOAuthCode(oauthCode.code, oauthCode.state);
   }
 
-  it("이메일과 비밀번호로 로그인하고 갱신 토큰만 저장할 수 있다.", async () => {
+  it("OAuth 교환 코드로 로그인하고 갱신 토큰만 저장할 수 있다.", async () => {
     await login();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/auth/login",
+      "/api/auth/oauth2/exchange",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify(oauthCode),
       }),
     );
     expect(session.user.value).toEqual(userFixture());
@@ -47,7 +47,7 @@ describe("JWT 로그인 세션", () => {
       refreshExpiresAt: now + 604800000,
     });
     expect(saved).not.toContain("access-first");
-    expect(saved).not.toContain(credentials.password);
+    expect(saved).not.toContain(oauthCode.code);
   });
 
   it("새로고침 후 회전된 갱신 토큰으로 세션을 복원할 수 있다.", async () => {
@@ -61,7 +61,7 @@ describe("JWT 로그인 세션", () => {
     await Promise.all([reloaded.restore(), reloaded.restore()]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1]![0]).toBe("/api/auth/refresh");
-    expect(reloaded.user.value?.email).toBe(credentials.email);
+    expect(reloaded.user.value?.email).toBe(userFixture().email);
     expect(storage.getItem(SESSION_KEY)).toContain("refresh-rotated");
   });
 
@@ -243,15 +243,15 @@ describe("JWT 로그인 세션", () => {
     expect(session.user.value).toEqual(userFixture());
   });
 
-  it("틀린 비밀번호로 인증 상태가 생성되는 것을 방지할 수 있다.", async () => {
+  it("만료된 OAuth 코드로 인증 상태가 생성되는 것을 방지할 수 있다.", async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ code: "INVALID_CREDENTIALS" }, 401),
+      jsonResponse({ code: "INVALID_OAUTH_CODE" }, 401),
     );
     await expect(
-      session.login(credentials.email, credentials.password),
+      session.exchangeOAuthCode(oauthCode.code, oauthCode.state),
     ).rejects.toMatchObject({
-      code: "INVALID_CREDENTIALS",
-      message: "이메일 또는 비밀번호를 확인해 주세요.",
+      code: "INVALID_OAUTH_CODE",
+      message: "Google 로그인 요청이 만료되었어요. 다시 로그인해 주세요.",
     });
     expect(session.user.value).toBeNull();
     expect(storage.getItem(SESSION_KEY)).toBeNull();

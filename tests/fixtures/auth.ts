@@ -1,11 +1,8 @@
 import type { UserProfile } from "@/store/auth";
 
-export const credentials = {
-  email: "writer@example.com",
-  password: "sample123!@#",
-};
+export const oauthCode = { code: "one-time-code", state: "login-state" };
 export function userFixture(role: UserProfile["role"] = "ADMIN"): UserProfile {
-  return { id: 1, name: "기록자", email: credentials.email, role };
+  return { id: 1, name: "기록자", email: "writer@example.com", role };
 }
 export function tokenFixture(
   suffix = "first",

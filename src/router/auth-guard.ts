@@ -1,22 +1,30 @@
 import type { RouteLocationNormalized } from "vue-router";
 import { AuthError, auth } from "@/store/auth";
 
-// Only known app destinations are accepted; query strings cannot create external redirects.
+import { safeAuthReturn } from "@/utils/auth/oauth";
+
 export function loginDestination(value: unknown) {
-  if (
-    typeof value === "string" &&
-    /^\/blog(?:\/[^/?#\\]+){0,2}(?:\?[^#\\]*)?(?:#[^\\]*)?$/.test(value)
-  )
-    return value;
-  if (typeof value === "string" && /^\/write(?:\/[a-f0-9-]{36})?$/.test(value))
-    return value;
-  return value === "/admin" && auth.user.value?.role === "ADMIN"
-    ? "/admin"
-    : "/";
+  const target = safeAuthReturn(value);
+  return target === "/admin" && auth.user.value?.role !== "ADMIN"
+    ? "/"
+    : target;
 }
 
 export async function authGuard(to: RouteLocationNormalized) {
   await auth.restore();
+  if (to.name === "oauth-callback") return;
+  if (auth.needsOnboarding.value && to.name !== "onboarding")
+    return {
+      name: "onboarding",
+      query: { redirect: safeAuthReturn(to.query.redirect ?? to.fullPath) },
+      replace: true,
+    };
+  if (
+    to.name === "onboarding" &&
+    auth.user.value &&
+    !auth.needsOnboarding.value
+  )
+    return { path: loginDestination(to.query.redirect), replace: true };
   if (to.name === "login" && auth.user.value && to.query.retry !== "1")
     return { path: loginDestination(to.query.redirect), replace: true };
   if (to.meta.requiresAuth && !auth.user.value)
