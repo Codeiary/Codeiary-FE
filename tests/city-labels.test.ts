@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutLabels } from "../src/city/label-layout";
+import { layoutLabels } from "@/utils/city/label-layout";
 
 describe("도시 건물 이름표", () => {
   it("가까운 건물 이름표가 서로 겹치지 않게 배치할 수 있다.", () => {

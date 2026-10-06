@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { auth, AuthError } from "../src/auth/session";
-import { authGuard, loginDestination } from "../src/auth/navigation";
+import { auth, AuthError } from "@/store/auth";
+import { authGuard, loginDestination } from "@/router/auth-guard";
 import { userFixture } from "./fixtures/auth";
 
-vi.mock("../src/auth/session", async (original) => {
-  const module = await original<typeof import("../src/auth/session")>();
+vi.mock("@/store/auth", async (original) => {
+  const module = await original<typeof import("@/store/auth")>();
   const { shallowRef } = await import("vue");
   return {
     ...module,

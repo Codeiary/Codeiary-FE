@@ -1,4 +1,4 @@
-import type { BlogPost } from "../../src/blog/posts";
+import type { BlogPost } from "@/utils/blog/posts";
 
 export function postFixture(overrides: Partial<BlogPost> = {}): BlogPost {
   return {

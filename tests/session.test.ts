@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthError, createAuthSession, SESSION_KEY } from "../src/auth/session";
+import { AuthError, createAuthSession, SESSION_KEY } from "@/store/auth";
 import {
   credentials,
   deferred,

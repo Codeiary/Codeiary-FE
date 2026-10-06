@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
-import LoginPage from "../src/pages/LoginPage.vue";
-import AccountActions from "../src/components/AccountActions.vue";
-import { auth, AuthError } from "../src/auth/session";
+import LoginPage from "@/views/LoginView.vue";
+import AccountActions from "@/components/AccountActions.vue";
+import { auth, AuthError } from "@/store/auth";
 import { credentials, deferred, userFixture } from "./fixtures/auth";
 
-vi.mock("../src/auth/session", async (original) => {
-  const module = await original<typeof import("../src/auth/session")>();
+vi.mock("@/store/auth", async (original) => {
+  const module = await original<typeof import("@/store/auth")>();
   const { ref, shallowRef } = await import("vue");
   return {
     ...module,

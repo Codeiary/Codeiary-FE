@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { auth, AuthError } from "../auth/session";
-import Icon from "./Icon.vue";
+import { auth, AuthError } from "@/store/auth";
+import Icon from "@/components/Icon.vue";
 
 defineProps<{ compact?: boolean }>();
 

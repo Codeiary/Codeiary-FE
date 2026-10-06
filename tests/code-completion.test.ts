@@ -3,8 +3,8 @@ import { CompletionContext } from "@codemirror/autocomplete";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { codeLanguageCompletion } from "../src/blog/code-completion";
-import { markdownInsertion } from "../src/blog/editor-commands";
+import { codeLanguageCompletion } from "@/utils/blog/code-completion";
+import { markdownInsertion } from "@/utils/blog/editor-commands";
 
 function completionFixture(doc: string, pos = doc.length) {
   let state = EditorState.create({

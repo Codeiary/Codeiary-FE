@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import BlogPostList from "../src/blog/BlogPostList.vue";
-import BlogPagination from "../src/blog/BlogPagination.vue";
+import BlogPostList from "@/components/blog/BlogPostList.vue";
+import BlogPagination from "@/components/blog/BlogPagination.vue";
 import { postFixture } from "./fixtures/blog";
 
 describe("블로그 페이지네이션", () => {

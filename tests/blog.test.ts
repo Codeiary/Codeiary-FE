@@ -2,20 +2,20 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createWebHistory, createRouter } from "vue-router";
-import CityApp from "../src/CityApp.vue";
-import { auth, type UserProfile } from "../src/auth/session";
+import CityApp from "@/views/CityView.vue";
+import { auth, type UserProfile } from "@/store/auth";
 import { userFixture } from "./fixtures/auth";
-import { cityRoutes } from "../src/city/routes";
+import { cityRoutes } from "@/router/city-routes";
 
-vi.mock("../src/blog/posts", async () => {
+vi.mock("@/utils/blog/posts", async () => {
   const { blogPostsFixture } = await import("./fixtures/blog");
   return { demoPosts: blogPostsFixture() };
 });
-vi.mock("../src/auth/session", async () => {
+vi.mock("@/store/auth", async () => {
   const { shallowRef } = await import("vue");
   return { auth: { user: shallowRef(null) } };
 });
-vi.mock("../src/city/world", () => ({
+vi.mock("@/utils/city/world", () => ({
   createCity: () => ({
     setPaused: vi.fn(),
     setNight: vi.fn(),

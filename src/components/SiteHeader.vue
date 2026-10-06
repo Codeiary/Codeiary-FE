@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, useId, watch } from "vue";
 import { useRoute } from "vue-router";
-import BrandLogo from "./BrandLogo.vue";
-import AccountActions from "./AccountActions.vue";
-import Icon from "./Icon.vue";
-import type { Destination } from "../city/places";
+import BrandLogo from "@/components/BrandLogo.vue";
+import AccountActions from "@/components/AccountActions.vue";
+import Icon from "@/components/Icon.vue";
+import type { Destination } from "@/utils/city/places";
 
 const props = defineProps<{
   items: readonly { id: Destination; name: string }[];

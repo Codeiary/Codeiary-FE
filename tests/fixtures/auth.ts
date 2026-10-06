@@ -1,4 +1,4 @@
-import type { UserProfile } from "../../src/auth/session";
+import type { UserProfile } from "@/store/auth";
 
 export const credentials = {
   email: "writer@example.com",
