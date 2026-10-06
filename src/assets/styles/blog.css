@@ -178,7 +178,10 @@
   line-height: 22px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
 }
 .blog .post-sort button:hover {
   color: var(--theme-text);
@@ -504,6 +507,26 @@
   }
 }
 @media (max-width: 600px) {
+  .content-window.blog
+    > .content-actions
+    :is(.content-action-edit, .blog-delete-button) {
+    width: 64px;
+    height: 34px;
+    min-height: 34px;
+    padding: 6px 8px;
+    gap: 5px;
+    border-radius: 7px;
+    font-size: var(--font-size-min);
+    font-weight: 600;
+    line-height: 18px;
+  }
+  .content-window.blog
+    > .content-actions
+    :is(.content-action-edit, .blog-delete-button)
+    > svg {
+    width: 14px;
+    height: 14px;
+  }
   .blog-filter .content-actions {
     gap: 4px;
   }
