@@ -47,6 +47,6 @@ export const places: Record<
     x: -19,
     z: 30,
     height: 11,
-    entrance: { x: -19, z: 22 },
+    entrance: { x: -19, z: 38 },
   },
 };

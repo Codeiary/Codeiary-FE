@@ -203,9 +203,6 @@ const visiblePosts = computed(() => {
   }
 }
 @media (max-width: 600px) {
-  .blog-collection-personal :deep(.search-input input) {
-    font-size: 16px;
-  }
   .blog-collection-personal .post-grid {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -171,18 +171,6 @@
 :root[data-theme="dark"] .article-body {
   scrollbar-color: #526760 transparent;
 }
-:root[data-theme="dark"] .map-svg > rect:first-child {
-  fill: #2f4449;
-}
-:root[data-theme="dark"] .map-svg [fill="#a8c6bf"] {
-  fill: #365f70;
-}
-:root[data-theme="dark"] .map-svg [fill="#d1d4c1"] {
-  fill: #586a60;
-}
-:root[data-theme="dark"] .map-svg [stroke="#bbc4b8"] {
-  stroke: #718278;
-}
 :root[data-theme="dark"] .admin-shell {
   background: #172127;
   color: var(--theme-text);

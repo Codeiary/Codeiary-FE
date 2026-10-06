@@ -564,7 +564,7 @@
     padding: 42px 24px;
   }
   .login-form-wrap h2 {
-    font-size: 27px;
+    font-size: var(--mobile-page-title-size, 27px);
   }
   .login-footer > span:last-child {
     font-size: var(--font-size-min);

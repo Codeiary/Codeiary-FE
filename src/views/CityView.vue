@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from "@/utils/profile/display-name";
 import {
   computed,
   nextTick,
@@ -22,27 +23,69 @@ import PostArticle from "@/components/blog/PostArticle.vue";
 import { editPost } from "@/services/blog-storage";
 import { deletePost, loadLocalPosts, localPosts } from "@/store/blog";
 import UserHome from "@/components/profile/UserHome.vue";
-import { createMockHome, homeBlogPosts } from "@/utils/profile/mock-home";
+import {
+  createMockHome,
+  homeBlogPosts,
+  type HomeProfile,
+} from "@/utils/profile/mock-home";
 import "@/assets/styles/blog.css";
 import "@/assets/styles/content-window.css";
 import { useTheme } from "@/composables/useTheme";
 import { places, type Destination } from "@/utils/city/places";
 import CityLabels from "@/components/city/CityLabels.vue";
-import type { CityController } from "@/utils/city/world";
-import type { Point } from "@/utils/city/navigation";
+import type { CityController, ResidenceAnchor } from "@/utils/city/world";
+import { residenceDirectory } from "@/services/mock-neighborhood";
+import { HOMES_PER_BLOCK, type Residence } from "@/utils/city/residences";
+import { useNeighborhood } from "@/composables/useNeighborhood";
+import NeighborhoodControls from "@/components/city/NeighborhoodControls.vue";
+import ResidenceLabels from "@/components/city/ResidenceLabels.vue";
+import VirtualJoystick from "@/components/city/VirtualJoystick.vue";
+import MobileRunButton from "@/components/city/MobileRunButton.vue";
 
 const route = useRoute();
 const router = useRouter();
 const { user } = auth;
 const posts = computed(() => [...demoPosts, ...localPosts.value]);
-const homeProfile = computed(() => createMockHome(user.value));
+const directory = computed(() => residenceDirectory(user.value, posts.value));
+const neighbors = computed(() =>
+  directory.value.filter((resident) => resident.id !== user.value?.id),
+);
+const neighborhood = useNeighborhood(neighbors);
+const {
+  page: district,
+  pageCount: districtCount,
+  visibleBlocks,
+  pending: districtLoading,
+  error: districtError,
+} = neighborhood;
+const residenceLabels = shallowRef<ResidenceAnchor[]>([]);
+const searchOpen = ref(false);
+const visitingResident = computed(() =>
+  directory.value.find(
+    (resident) => String(resident.id) === route.query.resident,
+  ),
+);
+const ownResidence = computed(() =>
+  directory.value.find((resident) => resident.id === user.value?.id),
+);
+const ownHouseLevel = computed(() => ownResidence.value?.level ?? 0);
+const homeProfile = computed<HomeProfile>(() => {
+  const resident = visitingResident.value;
+  if (!resident || resident.id === user.value?.id)
+    return createMockHome(user.value);
+  return {
+    owner: resident,
+    email: resident.email ?? "",
+    github: resident.github ?? "",
+    projects: [],
+    issues: [],
+  };
+});
 const homePosts = computed(() =>
   homeBlogPosts(posts.value, homeProfile.value.owner, user.value?.id),
 );
 function placeName(id: Destination) {
-  return id === "home"
-    ? `${homeProfile.value.owner.name}의 집`
-    : places[id].name;
+  return id === "home" ? `${displayName(user.value)}의 집` : places[id].name;
 }
 const storageError = ref("");
 watch(
@@ -73,7 +116,8 @@ const search = computed(() =>
   typeof route.query.q === "string" ? route.query.q : "",
 );
 const blogPage = computed(() => {
-  const page = typeof route.query.page === "string" ? Number(route.query.page) : 1;
+  const page =
+    typeof route.query.page === "string" ? Number(route.query.page) : 1;
   return Number.isSafeInteger(page) && page > 0 ? page : 1;
 });
 const selectedCategory = computed(() =>
@@ -97,7 +141,6 @@ const selectedProject = ref<number | null>(null),
 const toast = ref("");
 const deleteConfirmationOpen = ref(false);
 const deleteError = ref("");
-const position = shallowRef<Point>({ x: 8, z: 20.5 });
 const near = ref<Destination | null>(null);
 const labels = shallowRef<
   { id: Destination; x: number; y: number; visible: boolean }[]
@@ -186,7 +229,12 @@ const blogOwner = computed(() => {
         post.author &&
         (authorSlug(post.author.name) === slug ||
           String(post.author.id) === slug),
-    )?.author ?? null
+    )?.author ??
+    directory.value.find(
+      (resident) =>
+        authorSlug(resident.name) === slug || String(resident.id) === slug,
+    ) ??
+    null
   );
 });
 const isOwnBlog = computed(() =>
@@ -197,7 +245,7 @@ const blogScope = computed(() =>
 );
 const blogTitle = computed(() =>
   blogOwner.value
-    ? `${blogOwner.value.name}의 블로그`
+    ? `${displayName(blogOwner.value)}의 블로그`
     : route.params.authorSlug
       ? "블로그"
       : "Blog House",
@@ -226,12 +274,12 @@ const article = computed(() =>
 const canDeleteArticle = computed(() =>
   Boolean(
     user.value &&
-      isOwnBlog.value &&
-      article.value?.author?.id === user.value.id &&
-      localPosts.value.some(
-        (post) =>
-          post.id === article.value?.id && post.author?.id === user.value?.id,
-      ),
+    isOwnBlog.value &&
+    article.value?.author?.id === user.value.id &&
+    localPosts.value.some(
+      (post) =>
+        post.id === article.value?.id && post.author?.id === user.value?.id,
+    ),
   ),
 );
 const blogNotFound = computed(
@@ -366,6 +414,8 @@ watch(
   () => user.value?.id,
   () => {
     blogLocations.clear();
+    if (!user.value && panel.value === "home" && !visitingResident.value)
+      void closePanel();
     if (isBlogRoute.value)
       void router.replace({ name: "blog", state: { blogPrevious: null } });
   },
@@ -387,7 +437,9 @@ watch(
     const previousPanel = panel.value;
     const nextPanel = isBlogRoute.value
       ? "blog"
-      : view === "portfolio" || view === "news" || view === "home"
+      : view === "portfolio" ||
+          view === "news" ||
+          (view === "home" && (user.value || visitingResident.value))
         ? view
         : null;
     if (!previousPanel && nextPanel)
@@ -411,17 +463,74 @@ watch(
 const project = computed(() =>
   projects.find((p) => p.id === selectedProject.value),
 );
-const navItems: {
-  id: Destination;
-  name: string;
-  icon: string;
-  number: string;
-}[] = [
+const navItems = computed<
+  {
+    id: Destination;
+    name: string;
+    icon: string;
+    number: string;
+  }[]
+>(() => [
   { id: "blog", name: "블로그", icon: "book", number: "01" },
   { id: "portfolio", name: "포트폴리오", icon: "case", number: "02" },
   { id: "news", name: "최근 IT 이슈", icon: "news", number: "03" },
-  { id: "home", name: "내 집", icon: "home", number: "04" },
-];
+  ...(user.value
+    ? [{ id: "home" as const, name: "내 집", icon: "home", number: "04" }]
+    : []),
+]);
+function syncNeighborhood() {
+  city?.setNeighborhood(
+    visibleBlocks.value,
+    neighborhood.residents.value.length,
+  );
+}
+async function requestDistrict(index: number) {
+  await neighborhood.ensureBlock(index);
+  if (!unmounted) syncNeighborhood();
+}
+async function moveDistrict(index: number) {
+  if (index < 0) {
+    district.value = -1;
+    syncNeighborhood();
+    city?.goToDistrict(-1);
+    return;
+  }
+  if (!(await neighborhood.goToPage(index)) || unmounted) return;
+  syncNeighborhood();
+  city?.goToDistrict(index);
+}
+function enterResidence(resident: Residence) {
+  return router.push({
+    name: "city",
+    query: { view: "home", resident: String(resident.id) },
+  });
+}
+async function visitResidence(resident: Residence) {
+  await nextTick();
+  if (resident.id === user.value?.id) {
+    await moveDistrict(-1);
+    if (error.value) void openPanel("home");
+    else visit("home");
+    return;
+  }
+  const index = neighborhood.residents.value.findIndex(
+    (entry) => entry.id === resident.id,
+  );
+  if (index < 0) return;
+  const page = Math.floor(index / HOMES_PER_BLOCK);
+  if (district.value !== page) await moveDistrict(page);
+  if (error.value) void enterResidence(resident);
+  else if (!city?.visitResidence(index))
+    notify("집으로 이동하지 못했어요. 잠시 후 다시 시도해 주세요.");
+}
+watch(visibleBlocks, syncNeighborhood);
+watch(neighbors, () => {
+  city?.goToDistrict(-1);
+  syncNeighborhood();
+});
+watch([user, ownHouseLevel], () =>
+  city?.setHome(user.value ? ownHouseLevel.value : null),
+);
 function notify(message: string) {
   toast.value = message;
   clearTimeout(toastTimer);
@@ -438,6 +547,7 @@ function visit(id: Destination) {
   if (!city.visit(id)) notify("방향키로 입구에 가까이 이동해 주세요.");
 }
 function openPanel(id: Destination) {
+  if (id === "home" && !user.value) return;
   return id === "blog"
     ? blogRouteTarget({ name: "blog", query: {} })
     : router.push({ name: "city", query: { view: id } });
@@ -447,9 +557,11 @@ function closePanel() {
 }
 function home() {
   closePanel();
+  void moveDistrict(-1);
   city?.resetCamera();
 }
 function keyDown(event: KeyboardEvent) {
+  if (searchOpen.value) return;
   if (event.key === "Escape") {
     closePanel();
     return;
@@ -484,6 +596,7 @@ function keyDown(event: KeyboardEvent) {
   }
   if (
     event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLSelectElement ||
     event.target instanceof HTMLTextAreaElement
   )
     return;
@@ -514,6 +627,8 @@ function keyUp(event: KeyboardEvent) {
   city?.setInput(event.key, false);
 }
 function releaseKeys() {
+  city?.setJoystick({ x: 0, z: 0 });
+  city?.setRunning(false);
   for (const key of [
     "ArrowUp",
     "ArrowDown",
@@ -528,7 +643,9 @@ function releaseKeys() {
     city?.setInput(key, false);
 }
 watch(night, (value) => city?.setNight(value));
-watch(panel, (value) => city?.setPaused(Boolean(value)));
+watch([panel, searchOpen], ([value, searching]) =>
+  city?.setPaused(Boolean(value) || searching),
+);
 onMounted(async () => {
   if (route.query.access === "denied") notify("관리자만 접근할 수 있어요.");
   window.addEventListener("keydown", keyDown);
@@ -538,9 +655,6 @@ onMounted(async () => {
     const { createCity } = await import("@/utils/city/world");
     if (unmounted) return;
     city = createCity(canvas.value!, {
-      position: (p) => {
-        position.value = p;
-      },
       labels: (p) => {
         labels.value = p;
       },
@@ -552,9 +666,21 @@ onMounted(async () => {
       near: (id) => {
         near.value = id;
       },
+      residenceLabels: (value) => {
+        residenceLabels.value = value;
+      },
+      enterResidence,
+      travellingResidence: (resident) =>
+        notify(`${displayName(resident)}의 집으로 이동하는 중이에요`),
+      requestDistrict,
+      districtChanged: (value) => {
+        district.value = value;
+      },
     });
     city.setPaused(Boolean(panel.value));
     city.setNight(night.value);
+    city.setHome(user.value ? ownHouseLevel.value : null);
+    syncNeighborhood();
   } catch (reason) {
     if (unmounted) return;
     error.value = true;
@@ -579,7 +705,11 @@ onBeforeUnmount(() => {
       @home="home"
       @navigate="openPanel"
     />
-    <main class="city-board" aria-label="Codeiary 3D 도시" :inert="Boolean(panel)">
+    <main
+      class="city-board"
+      aria-label="Codeiary 3D 도시"
+      :inert="Boolean(panel)"
+    >
       <div class="sky-haze"></div>
       <canvas
         ref="canvas"
@@ -588,20 +718,29 @@ onBeforeUnmount(() => {
         aria-label="3D 동네. 방향키 또는 WASD로 이동하고, 건물을 클릭하거나 입구로 걸어가면 콘텐츠가 열립니다."
       ></canvas>
       <div class="board-grain"></div>
-      <section class="hero-copy">
-        <div class="eyebrow">
-          <Icon name="asterisk" class="tiny-cross" :size="25" /> LEARN. BUILD.
-          DOCUMENT.
-        </div>
-        <h1>Code <br /><span>Diary</span></h1>
-        <p class="hero-subtitle">Wonseok’s Dev Story</p>
-      </section>
+      <h1 class="visually-hidden">Code Diary</h1>
       <CityLabels
-        v-if="ready"
+        v-if="ready && district < 0"
         :labels="labels"
         :near="near"
         :home-name="placeName('home')"
         @visit="visit"
+      />
+      <ResidenceLabels
+        v-if="ready && district >= 0"
+        :labels="residenceLabels"
+        @visit="visitResidence"
+      />
+      <NeighborhoodControls
+        :directory="directory"
+        :viewer-id="user?.id"
+        :page="district"
+        :page-count="districtCount"
+        :loading="districtLoading > 0"
+        :error="districtError"
+        @visit="visitResidence"
+        @district="moveDistrict"
+        @pause="searchOpen = $event"
       />
       <div v-if="error" class="fallback-message">
         <Icon name="map" :size="36" /><strong
@@ -618,117 +757,6 @@ onBeforeUnmount(() => {
       <div class="world-tools" aria-label="화면 모드">
         <ThemeToggle />
       </div>
-      <aside class="minimap" aria-label="동네 지도">
-        <div class="map-content">
-          <svg
-            class="map-svg"
-            viewBox="0 0 220 130"
-            aria-label="플레이어 위치와 네 건물"
-          >
-            <rect width="220" height="130" rx="5" fill="#e9e9dc" />
-            <path d="M202 0h18v130h-18z" fill="#a8c6bf" />
-            <path d="M0 86h202M139 0v130" stroke="#bbc4b8" stroke-width="13" />
-            <path
-              d="M0 86h202M139 0v130"
-              stroke="#f8f4e5"
-              stroke-width="1"
-              stroke-dasharray="4 4"
-            />
-            <path
-              d="M12 8h25v21H12zM49 8h28v25H49zM99 7h24v21H99zM159 7h32v19h-32zM10 108h28v19H10zM88 111h27v17H88zM161 108h28v20h-28zM14 41h24v23H14z"
-              fill="#d1d4c1"
-            />
-            <rect x="90" y="46" width="24" height="23" rx="3" fill="#c5d0ad" />
-            <circle cx="103" cy="58" r="5" fill="#a9c7bd" />
-            <g
-              class="map-place"
-              role="button"
-              tabindex="0"
-              aria-label="블로그 하우스 방문"
-              @click="visit('blog')"
-              @keydown.enter.prevent="visit('blog')"
-            >
-              <rect
-                x="54"
-                y="45"
-                width="29"
-                height="23"
-                rx="3"
-                fill="#d68a72"
-              />
-              <circle cx="68" cy="57" r="5" fill="#f7ead7" />
-            </g>
-            <g
-              class="map-place"
-              role="button"
-              tabindex="0"
-              aria-label="포트폴리오 갤러리 방문"
-              @click="visit('portfolio')"
-              @keydown.enter.prevent="visit('portfolio')"
-            >
-              <rect
-                x="101"
-                y="15"
-                width="28"
-                height="26"
-                rx="3"
-                fill="#6d9c8c"
-              />
-              <circle cx="115" cy="28" r="5" fill="#f7ead7" />
-            </g>
-            <g
-              class="map-place"
-              role="button"
-              tabindex="0"
-              aria-label="IT 뉴스 타워 방문"
-              @click="visit('news')"
-              @keydown.enter.prevent="visit('news')"
-            >
-              <rect
-                x="158"
-                y="41"
-                width="27"
-                height="28"
-                rx="3"
-                fill="#d1b36d"
-              />
-              <circle cx="171" cy="55" r="5" fill="#f7ead7" />
-            </g>
-            <g
-              class="map-place"
-              role="button"
-              tabindex="0"
-              :aria-label="`${placeName('home')} 방문`"
-              @click="visit('home')"
-              @keydown.enter.prevent="visit('home')"
-              @keydown.space.prevent="visit('home')"
-            >
-              <rect
-                x="52"
-                y="105"
-                width="24"
-                height="22"
-                rx="3"
-                fill="#bd795b"
-              />
-              <path d="m59 116 5-4 5 4v6H59z" fill="#f7ead7" />
-            </g>
-            <circle
-              :cx="(position.x + 50) * 2 + 10"
-              :cy="(position.z + 48) * 1.3"
-              r="7"
-              fill="#f5f0df"
-              opacity=".9"
-            />
-            <circle
-              :cx="(position.x + 50) * 2 + 10"
-              :cy="(position.z + 48) * 1.3"
-              r="3.5"
-              fill="#db7853"
-            />
-          </svg>
-        </div>
-      </aside>
       <div class="control-dock">
         <div class="control-item">
           <span class="arrow-key-grid"
@@ -755,45 +783,14 @@ onBeforeUnmount(() => {
           ><Icon name="arrow" :size="12" />
         </a>
       </div>
-      <div class="mobile-controls" aria-label="터치 이동 버튼">
-        <button
-          class="touch-up"
-          aria-label="위로 이동"
-          @pointerdown.prevent="city?.setInput('ArrowUp', true)"
-          @pointerup="city?.setInput('ArrowUp', false)"
-          @pointerleave="city?.setInput('ArrowUp', false)"
-          @pointercancel="releaseKeys"
-        >
-          ↑</button
-        ><button
-          class="touch-left"
-          aria-label="왼쪽으로 이동"
-          @pointerdown.prevent="city?.setInput('ArrowLeft', true)"
-          @pointerup="city?.setInput('ArrowLeft', false)"
-          @pointerleave="city?.setInput('ArrowLeft', false)"
-          @pointercancel="releaseKeys"
-        >
-          ←</button
-        ><button
-          class="touch-down"
-          aria-label="아래로 이동"
-          @pointerdown.prevent="city?.setInput('ArrowDown', true)"
-          @pointerup="city?.setInput('ArrowDown', false)"
-          @pointerleave="city?.setInput('ArrowDown', false)"
-          @pointercancel="releaseKeys"
-        >
-          ↓</button
-        ><button
-          class="touch-right"
-          aria-label="오른쪽으로 이동"
-          @pointerdown.prevent="city?.setInput('ArrowRight', true)"
-          @pointerup="city?.setInput('ArrowRight', false)"
-          @pointerleave="city?.setInput('ArrowRight', false)"
-          @pointercancel="releaseKeys"
-        >
-          →
-        </button>
-      </div>
+      <MobileRunButton
+        :disabled="!ready || error || Boolean(panel) || searchOpen"
+        @change="city?.setRunning($event)"
+      />
+      <VirtualJoystick
+        :disabled="!ready || error || Boolean(panel) || searchOpen"
+        @move="city?.setJoystick($event)"
+      />
       <Transition name="toast"
         ><div v-if="toast" class="toast-message" role="status">
           <span class="player-dot"></span>{{ toast }}
@@ -815,7 +812,11 @@ onBeforeUnmount(() => {
           :class="panel"
           role="dialog"
           aria-modal="true"
-          :aria-label="placeName(panel)"
+          :aria-label="
+            panel === 'home'
+              ? `${displayName(homeProfile.owner)}의 집`
+              : placeName(panel)
+          "
           tabindex="-1"
         >
           <SiteHeader
@@ -841,7 +842,9 @@ onBeforeUnmount(() => {
           >
             <div>
               <h2 id="post-delete-title">게시글을 삭제할까요?</h2>
-              <p id="post-delete-description">삭제한 글은 복구할 수 없습니다.</p>
+              <p id="post-delete-description">
+                삭제한 글은 복구할 수 없습니다.
+              </p>
               <p v-if="deleteError" class="post-delete-error" role="alert">
                 {{ deleteError }}
               </p>
@@ -860,7 +863,13 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <h2 id="content-panel-title" class="visually-hidden">
-            {{ panel === "blog" ? blogTitle : placeName(panel) }}
+            {{
+              panel === "blog"
+                ? blogTitle
+                : panel === "home"
+                  ? `${displayName(homeProfile.owner)}의 집`
+                  : placeName(panel)
+            }}
           </h2>
           <p
             v-if="panel === 'blog' && isOwnBlog && storageError"
@@ -873,6 +882,16 @@ onBeforeUnmount(() => {
             v-if="panel === 'home'"
             :profile="homeProfile"
             :posts="homePosts"
+            :own="homeProfile.owner.id === user?.id"
+            :post-count="
+              visitingResident?.postCount ?? ownResidence?.postCount ?? 0
+            "
+            :level="visitingResident?.level ?? ownHouseLevel"
+            :activity-points="
+              visitingResident
+                ? visitingResident.activityPoints
+                : (ownResidence?.activityPoints ?? null)
+            "
             @blog="openAuthorBlog(homeProfile.owner)"
             @post="openPost"
           />

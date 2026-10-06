@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from "@/utils/profile/display-name";
 import Icon from "@/components/Icon.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
 import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
@@ -52,13 +53,13 @@ defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
         <button
           v-if="post.author"
           class="blog-author-link"
-          :aria-label="`${post.author.name}의 블로그 보기`"
+          :aria-label="`${displayName(post.author)}의 블로그 보기`"
           @click="$emit('author', post.author)"
         >
           <span class="author-avatar" aria-hidden="true">{{
-            post.author.name.slice(0, 1)
+            displayName(post.author).slice(0, 1)
           }}</span>
-          {{ post.author.name }}<Icon name="arrow-right" :size="13" />
+          {{ displayName(post.author) }}<Icon name="arrow-right" :size="13" />
         </button>
         <span v-else class="post-author-unknown">작성자 정보 없음</span>
       </div>
@@ -167,7 +168,7 @@ defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
     border-radius: 9px;
   }
   .post-card-compact .post-content h3 {
-    font-size: 16px;
+    font-size: var(--mobile-item-title-size, 16px);
   }
   .post-card-compact .post-content p {
     font-size: var(--font-size-min);

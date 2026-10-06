@@ -745,7 +745,7 @@
     padding: 10px 20px;
   }
   .writer-title {
-    font-size: 25px;
+    font-size: var(--mobile-page-title-size, 25px);
     max-height: 100px;
     margin: 6px 0;
   }

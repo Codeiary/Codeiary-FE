@@ -1,7 +1,11 @@
 import { openDB, type DBSchema } from "idb";
 import type { BlogAuthor, BlogPost, PostVisibility } from "@/utils/blog/posts";
 import { postSlug } from "@/utils/blog/slug";
-import type { ImageLayouts, ImageSize, ImageSizes } from "@/utils/blog/image-layout";
+import type {
+  ImageLayouts,
+  ImageSize,
+  ImageSizes,
+} from "@/utils/blog/image-layout";
 
 export interface BlogDraft {
   id: string;
@@ -67,7 +71,7 @@ export function createDraft(author: BlogAuthor & { id: number }): BlogDraft {
   return {
     id: crypto.randomUUID(),
     authorId: author.id,
-    author: { id: author.id, name: author.name },
+    author: { id: author.id, name: author.name, nickname: author.nickname },
     title: "",
     category: "",
     content: "",
@@ -183,7 +187,7 @@ export async function editPost(post: BlogPost, authorId: number) {
   );
   if (existing) return existing;
   const draft = {
-    ...createDraft({ id: authorId, name: post.author.name }),
+    ...createDraft({ ...post.author, id: authorId }),
     postId: post.id,
     title: post.title,
     category: post.category,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from "@/utils/profile/display-name";
 import { ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { auth, AuthError } from "@/store/auth";
@@ -34,8 +35,8 @@ async function logout() {
         class="account-admin"
         >관리자</RouterLink
       >
-      <span v-if="!compact" class="account-name" :title="user.name"
-        >{{ user.name }}<span>님</span></span
+      <span v-if="!compact" class="account-name" :title="displayName(user)"
+        >{{ displayName(user) }}<span>님</span></span
       >
       <button class="account-button" :disabled="signingOut" @click="logout">
         {{ signingOut ? "로그아웃 중" : "로그아웃" }}

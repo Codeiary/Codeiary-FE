@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from "@/utils/profile/display-name";
 import {
   computed,
   nextTick,
@@ -560,7 +561,8 @@ onBeforeUnmount(() => {
     <main v-else class="writer-workspace" :aria-busy="publishing">
       <div class="writer-byline">
         <span class="writer-author"
-          ><span class="writer-author-dot"></span>{{ draft.author.name }}의
+          ><span class="writer-author-dot"></span
+          >{{ displayName(draft.author) }}의
           {{ draft.postId ? "글 수정" : "새로운 기록" }}</span
         >
         <div class="writer-modes" role="group" aria-label="편집 화면 모드">

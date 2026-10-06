@@ -114,9 +114,32 @@ onBeforeUnmount(() => observer?.disconnect());
   overflow: hidden;
   text-overflow: ellipsis;
 }
-@media (max-width: 600px) {
+@media (max-width: 649px) {
+  .building-label {
+    padding: 4px 6px;
+    gap: 0;
+    border-left: 2px solid var(--place-color);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--theme-surface) 88%, transparent);
+    box-shadow: none;
+  }
+  .building-label::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+  }
+  .label-icon {
+    display: none;
+  }
+  .label-content small {
+    display: none;
+  }
   .label-content strong {
-    max-width: 100px;
+    max-width: 85px;
+    font-size: var(--city-mobile-label-font-size);
+  }
+  .building-label > svg {
+    display: none;
   }
 }
 </style>
