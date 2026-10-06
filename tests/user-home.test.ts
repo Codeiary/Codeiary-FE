@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
-import UserHome from "../src/profile/UserHome.vue";
-import { createMockHome, homeBlogPosts } from "../src/profile/mock-home";
+import UserHome from "@/components/profile/UserHome.vue";
+import { createMockHome, homeBlogPosts } from "@/utils/profile/mock-home";
 import { userFixture } from "./fixtures/auth";
 import { blogPostsFixture, postFixture } from "./fixtures/blog";
 

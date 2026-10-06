@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { emailError, passwordError } from "../src/auth/validation";
+import { emailError, passwordError } from "@/utils/auth/validation";
 
 it("소문자 이메일과 올바른 주소 형식을 검증할 수 있다.", () => {
   expect(emailError("writer@example.com")).toBe("");

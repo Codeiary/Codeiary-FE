@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import Icon from "./Icon.vue";
-import EditorIcon from "../blog/EditorIcon.vue";
+import Icon from "@/components/Icon.vue";
+import EditorIcon from "@/components/blog/EditorIcon.vue";
 
 defineProps<{
   action?: "write" | "edit" | "blog";

@@ -7,18 +7,16 @@ import {
   createDraft,
   editPost,
   listDrafts,
-  loadLocalPosts,
-  localPosts,
-  publishDraft,
   readDraft,
   resolveImages,
   resolveImageSizes,
   saveImageSize,
   saveDraft,
-} from "../src/blog/storage";
-import { markdownHeadings, renderMarkdown } from "../src/blog/markdown";
-import { buildHeadingTree } from "../src/blog/heading-outline";
-import { markdownInsertion } from "../src/blog/editor-commands";
+} from "@/services/blog-storage";
+import { loadLocalPosts, localPosts, publishDraft } from "@/store/blog";
+import { markdownHeadings, renderMarkdown } from "@/utils/blog/markdown";
+import { buildHeadingTree } from "@/utils/blog/heading-outline";
+import { markdownInsertion } from "@/utils/blog/editor-commands";
 import { userFixture } from "./fixtures/auth";
 
 function draftFixture() {
