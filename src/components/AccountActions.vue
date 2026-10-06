@@ -4,6 +4,8 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { auth, AuthError } from "../auth/session";
 import Icon from "./Icon.vue";
 
+defineProps<{ compact?: boolean }>();
+
 const route = useRoute();
 const router = useRouter();
 const error = ref("");
@@ -27,12 +29,12 @@ async function logout() {
   <div class="account-actions">
     <template v-if="user">
       <RouterLink
-        v-if="user.role === 'ADMIN' && route.name !== 'admin'"
+        v-if="!compact && user.role === 'ADMIN' && route.name !== 'admin'"
         to="/admin"
         class="account-admin"
         >관리자</RouterLink
       >
-      <span class="account-name" :title="user.name"
+      <span v-if="!compact" class="account-name" :title="user.name"
         >{{ user.name }}<span>님</span></span
       >
       <button class="account-button" :disabled="signingOut" @click="logout">
@@ -64,7 +66,7 @@ async function logout() {
   text-decoration: none;
 }
 .account-name {
-  font-size: 12px;
+  font-size: var(--account-font-size, var(--font-size-min));
   max-width: 110px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -75,7 +77,7 @@ async function logout() {
   color: var(--theme-muted);
 }
 .account-admin {
-  font-size: 12px;
+  font-size: var(--account-font-size, var(--font-size-min));
   color: var(--theme-muted);
 }
 .account-admin:hover {
@@ -92,7 +94,7 @@ async function logout() {
   border-radius: 6px;
   color: var(--theme-text);
   background: var(--theme-surface);
-  font-size: 12px;
+  font-size: var(--account-font-size, var(--font-size-min));
   font-weight: 550;
   transition:
     border-color 0.2s,
@@ -126,7 +128,7 @@ async function logout() {
   border: 1px solid var(--theme-accent);
   border-radius: 8px;
   box-shadow: 0 8px 30px #00000014;
-  font-size: 12px;
+  font-size: var(--account-font-size, var(--font-size-min));
   line-height: 1.7;
 }
 .account-error button {
@@ -148,10 +150,10 @@ async function logout() {
   .account-button {
     min-height: 36px;
     padding: 0 12px;
-    font-size: 11px;
+    font-size: var(--account-font-size, var(--font-size-min));
   }
   .account-admin {
-    font-size: 11px;
+    font-size: var(--account-font-size, var(--font-size-min));
   }
 }
 </style>

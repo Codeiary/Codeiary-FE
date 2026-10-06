@@ -363,7 +363,9 @@ export function createCity(
   dish.rotation.z = -0.6;
   news.add(dish);
 
-  // Smaller neighborhood buildings frame the three destinations.
+  const destinations = [blog, gallery, news];
+
+  // Smaller neighborhood buildings frame the destinations.
   const cafe = building(-36, -7, 11, 5.5, 12, "#ddd0b2", 1);
   sign(cafe, "SLOW COFFEE", 0, 4.5, 6.1, 9, 1.3, "#3d685e", "#f3ead6");
   box(cafe, 0, 3.1, 7, 11.7, 0.2, 2.5, "#64846e");
@@ -385,8 +387,35 @@ export function createCity(
     [-17, -58, 14, 13, 12, "#c7c6b5", 3],
     [5, -56, 15, 15, 12, "#b1c0b4", 3],
   ] as const;
-  for (const [x, z, w, h, d, color, floors] of homes)
-    building(x, z, w, h, d, color, floors);
+  for (const [x, z, w, h, d, color, floors] of homes) {
+    const neighborhoodBuilding = building(x, z, w, h, d, color, floors);
+    if (x === places.home.x && z === places.home.z) {
+      neighborhoodBuilding.userData.destination = "home";
+      destinations.push(neighborhoodBuilding);
+      // The existing residence opens toward the sidewalk on its north side.
+      box(
+        neighborhoodBuilding,
+        0,
+        2.1,
+        -d / 2 - 0.08,
+        2.4,
+        3.6,
+        0.16,
+        "#617a73",
+      );
+      box(
+        neighborhoodBuilding,
+        0,
+        4.1,
+        -d / 2 - 0.7,
+        4.2,
+        0.22,
+        1.8,
+        "#e9dcc7",
+      );
+      box(neighborhoodBuilding, 0, 0.1, -d / 2 - 0.7, 4.2, 0.2, 1.8, "#ded0b6");
+    }
+  }
   const cornerShop = building(-3, 31, 12, 5.3, 10, "#b6c4b1", 1);
   sign(
     cornerShop,
@@ -864,7 +893,7 @@ export function createCity(
       ),
       camera,
     );
-    const hits = raycaster.intersectObjects([blog, gallery, news], true);
+    const hits = raycaster.intersectObjects(destinations, true);
     if (!hits.length) return;
     let object: THREE.Object3D | null = hits[0]!.object;
     while (object && !object.userData.destination) object = object.parent;

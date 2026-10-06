@@ -1,6 +1,6 @@
 import type { Point } from "./navigation";
 
-export type Destination = "blog" | "portfolio" | "news";
+export type Destination = "blog" | "portfolio" | "news" | "home";
 export const places: Record<
   Destination,
   {
@@ -39,5 +39,14 @@ export const places: Record<
     z: -10,
     height: 24,
     entrance: { x: 30, z: -1 },
+  },
+  home: {
+    name: "내 집",
+    english: "MY HOME",
+    color: "#bd795b",
+    x: -19,
+    z: 30,
+    height: 11,
+    entrance: { x: -19, z: 22 },
   },
 };

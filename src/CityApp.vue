@@ -8,28 +8,94 @@ import {
   shallowRef,
   watch,
 } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Icon from "./components/Icon.vue";
-import BrandLogo from "./components/BrandLogo.vue";
+import SiteHeader from "./components/SiteHeader.vue";
+import ContentActions from "./components/ContentActions.vue";
 import ThemeToggle from "./components/ThemeToggle.vue";
-import AccountActions from "./components/AccountActions.vue";
+import { auth } from "./auth/session";
+import { demoPosts, type BlogAuthor, type BlogPost } from "./blog/posts";
+import { authorSlug, postSlug } from "./blog/slug";
+import BlogPostList from "./blog/BlogPostList.vue";
+import DefaultPostCover from "./blog/DefaultPostCover.vue";
+import PostArticle from "./blog/PostArticle.vue";
+import { deletePost, editPost, loadLocalPosts, localPosts } from "./blog/storage";
+import UserHome from "./profile/UserHome.vue";
+import { createMockHome, homeBlogPosts } from "./profile/mock-home";
+import "./blog/blog.css";
+import "./content-window.css";
 import { useTheme } from "./theme";
 import { places, type Destination } from "./city/places";
+import CityLabels from "./city/CityLabels.vue";
 import type { CityController } from "./city/world";
 import type { Point } from "./city/navigation";
 
 const route = useRoute();
+const router = useRouter();
+const { user } = auth;
+const posts = computed(() => [...demoPosts, ...localPosts.value]);
+const homeProfile = computed(() => createMockHome(user.value));
+const homePosts = computed(() =>
+  homeBlogPosts(posts.value, homeProfile.value.owner, user.value?.id),
+);
+function placeName(id: Destination) {
+  return id === "home"
+    ? `${homeProfile.value.owner.name}의 집`
+    : places[id].name;
+}
+const storageError = ref("");
+watch(
+  () => user.value?.id,
+  async (_id, _old, onCleanup) => {
+    let stale = false;
+    onCleanup(() => {
+      stale = true;
+    });
+    try {
+      await loadLocalPosts();
+      if (!stale) {
+        storageError.value = "";
+      }
+    } catch {
+      if (!stale)
+        storageError.value =
+          "저장한 글을 불러오지 못했어요. 새로고침 후 다시 확인해 주세요.";
+    }
+  },
+  { immediate: true },
+);
+const isBlogRoute = computed(() => route.meta.blog === true);
+const postSort = computed(() =>
+  !route.params.authorSlug && route.query.sort === "views" ? "views" : "latest",
+);
+const search = computed(() =>
+  typeof route.query.q === "string" ? route.query.q : "",
+);
+const blogPage = computed(() => {
+  const page = typeof route.query.page === "string" ? Number(route.query.page) : 1;
+  return Number.isSafeInteger(page) && page > 0 ? page : 1;
+});
+const selectedCategory = computed(() =>
+  route.params.authorSlug && typeof route.query.category === "string"
+    ? route.query.category
+    : "",
+);
+const selectedTag = computed(() =>
+  !route.params.authorSlug && typeof route.query.tag === "string"
+    ? route.query.tag
+    : "",
+);
+const blogLocations = new Map<string, number>();
 const { isDark: night } = useTheme();
 const canvas = ref<HTMLCanvasElement>();
 const ready = ref(false),
   error = ref(false);
 const panel = ref<Destination | null>(null);
-const selectedArticle = ref<number | null>(null),
-  selectedProject = ref<number | null>(null),
+const selectedProject = ref<number | null>(null),
   newsSelection = ref<number | null>(null);
-const category = ref("전체"),
-  search = ref(""),
-  toast = ref("");
+const toast = ref("");
+const deleteConfirmationOpen = ref(false);
+const deleteError = ref("");
 const position = shallowRef<Point>({ x: 8, z: 20.5 });
 const near = ref<Destination | null>(null);
 const labels = shallowRef<
@@ -41,49 +107,6 @@ let unmounted = false;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let previousFocus: HTMLElement | null = null;
 
-const posts = [
-  {
-    id: 1,
-    category: "개발 기록",
-    title: "화면이 아닌, 하나의 세계를 만든다는 것",
-    description:
-      "Three.js와 Vue로 작은 도시를 만들며 배운 것들. 인터랙션은 어떻게 경험이 되는 걸까?",
-    date: "2026.10.04",
-    read: "8분",
-    art: "city",
-    tags: ["Three.js", "Vue"],
-  },
-  {
-    id: 2,
-    category: "프론트엔드",
-    title: "좋은 인터랙션은 0.1초에서 시작된다",
-    description: "작은 피드백과 자연스러운 움직임이 사용자 경험에 미치는 영향.",
-    date: "2026.09.28",
-    read: "5분",
-    art: "motion",
-    tags: ["UX", "Animation"],
-  },
-  {
-    id: 3,
-    category: "개발 기록",
-    title: "코드에 나만의 취향을 담는 방법",
-    description: "읽기 좋은 코드와 오래 쓰고 싶은 제품에 대한 개인적인 생각.",
-    date: "2026.09.21",
-    read: "6분",
-    art: "code",
-    tags: ["Design", "Devlog"],
-  },
-  {
-    id: 4,
-    category: "프론트엔드",
-    title: "Vue의 반응성을 조금 더 깊이 들여다보기",
-    description: "ref, computed, watch를 상황에 맞게 사용하기 위한 기록.",
-    date: "2026.09.15",
-    read: "7분",
-    art: "vue",
-    tags: ["Vue", "TypeScript"],
-  },
-];
 const projects = [
   {
     id: 1,
@@ -148,17 +171,241 @@ const newsItems = [
     body: "브라우저의 동작 방식, 의미 있는 HTML, CSS 레이아웃, JavaScript의 실행 모델은 다양한 프레임워크를 이해하는 기반이 됩니다. 특정 기술의 순위를 소개하는 기사 대신 기본기에 대한 질문을 담은 예시입니다.",
   },
 ];
-const filteredPosts = computed(() =>
-  posts.filter(
-    (p) =>
-      (category.value === "전체" || p.category === category.value) &&
-      `${p.title} ${p.description} ${p.tags.join(" ")}`
-        .toLowerCase()
-        .includes(search.value.toLowerCase()),
-  ),
+const blogOwner = computed(() => {
+  const slug = route.params.authorSlug;
+  if (typeof slug !== "string") return null;
+  if (
+    user.value &&
+    (authorSlug(user.value.name) === slug || String(user.value.id) === slug)
+  )
+    return user.value;
+  return (
+    posts.value.find(
+      (post) =>
+        post.author &&
+        (authorSlug(post.author.name) === slug ||
+          String(post.author.id) === slug),
+    )?.author ?? null
+  );
+});
+const isOwnBlog = computed(() =>
+  Boolean(user.value && blogOwner.value?.id === user.value.id),
+);
+const blogScope = computed(() =>
+  !route.params.authorSlug ? "all" : isOwnBlog.value ? "mine" : "author",
+);
+const blogTitle = computed(() =>
+  blogOwner.value
+    ? `${blogOwner.value.name}의 블로그`
+    : route.params.authorSlug
+      ? "블로그"
+      : "Blog House",
+);
+const scopedPosts = computed(() =>
+  posts.value.filter((post) => {
+    if (blogScope.value === "all")
+      return post.status === "PUBLISHED" && post.visibility !== "PRIVATE";
+    return (
+      blogOwner.value &&
+      post.author?.id === blogOwner.value.id &&
+      (post.visibility !== "PRIVATE" || isOwnBlog.value) &&
+      post.status === "PUBLISHED"
+    );
+  }),
 );
 const article = computed(() =>
-  posts.find((p) => p.id === selectedArticle.value),
+  scopedPosts.value.find(
+    (post) =>
+      post.author &&
+      (authorSlug(post.author.name) === route.params.authorSlug ||
+        String(post.author.id) === route.params.authorSlug) &&
+      (post.slug || postSlug(post.title)) === route.params.postSlug,
+  ),
+);
+const canDeleteArticle = computed(() =>
+  Boolean(
+    user.value &&
+      isOwnBlog.value &&
+      article.value?.author?.id === user.value.id &&
+      localPosts.value.some(
+        (post) =>
+          post.id === article.value?.id && post.author?.id === user.value?.id,
+      ),
+  ),
+);
+const blogNotFound = computed(
+  () =>
+    isBlogRoute.value &&
+    ((Boolean(route.params.authorSlug) && !blogOwner.value) ||
+      (Boolean(route.params.postSlug) && !article.value)),
+);
+function restoreBlogScroll(top = 0) {
+  nextTick(() =>
+    dialog.value
+      ?.querySelector<HTMLElement>(".window-body, .article-body")
+      ?.scrollTo({ top }),
+  );
+}
+function blogRouteTarget(target: Exclude<RouteLocationRaw, string>) {
+  return router.push({
+    ...target,
+    state: {
+      blogPrevious:
+        isBlogRoute.value || panel.value === "home" ? route.fullPath : null,
+    },
+  });
+}
+
+function openArticle(id: number) {
+  const post = scopedPosts.value.find((post) => post.id === id);
+  if (!post?.author) {
+    notify("작성자 정보를 찾을 수 없어요.");
+    return;
+  }
+  return openPost(post);
+}
+function openPost(post: BlogPost) {
+  if (!post.author) return;
+  return blogRouteTarget({
+    name: "blog-post",
+    params: {
+      authorSlug: authorSlug(post.author.name),
+      postSlug: post.slug || postSlug(post.title),
+    },
+  });
+}
+function selectBlogScope(scope: "all" | "mine") {
+  return scope === "mine" && user.value
+    ? blogRouteTarget({
+        name: "user-blog",
+        params: { authorSlug: authorSlug(user.value.name) },
+      })
+    : blogRouteTarget({ name: "blog", query: {} });
+}
+function openAuthorBlog(author: BlogAuthor) {
+  return blogRouteTarget({
+    name: "user-blog",
+    params: { authorSlug: authorSlug(author.name) },
+  });
+}
+function updateBlogQuery(
+  key: "q" | "category" | "sort" | "tag",
+  value: string,
+) {
+  const query = { ...route.query };
+  delete query.page;
+  if (value) query[key] = value;
+  else delete query[key];
+  return router.replace({
+    query,
+    state: { blogPrevious: router.options.history.state.blogPrevious ?? null },
+  });
+}
+function selectBlogPage(page: number) {
+  const query = { ...route.query };
+  if (page > 1) query.page = String(page);
+  else delete query.page;
+  return router.push({
+    query,
+    state: { blogPrevious: router.options.history.state.blogPrevious ?? null },
+  });
+}
+function selectBlogTag(tag: string) {
+  if (!route.params.authorSlug) return updateBlogQuery("tag", tag);
+  return blogRouteTarget({ name: "blog", query: tag ? { tag } : {} });
+}
+const contentAction = computed(() => {
+  if (panel.value !== "blog" || !user.value) return undefined;
+  if (!isOwnBlog.value) return "blog";
+  if (!article.value) return "write";
+  return article.value.content !== undefined ? "edit" : undefined;
+});
+function handleContentAction(action: "write" | "edit" | "blog" | "delete") {
+  if (action === "delete") {
+    deleteError.value = "";
+    deleteConfirmationOpen.value = true;
+    return;
+  }
+  if (action === "write") return startWriting();
+  if (action === "edit") return continueEditing();
+  return selectBlogScope("mine");
+}
+async function deleteCurrentPost() {
+  const post = article.value;
+  const owner = user.value;
+  if (!post || !owner || !canDeleteArticle.value) {
+    deleteConfirmationOpen.value = false;
+    return;
+  }
+  deleteError.value = "";
+  try {
+    await deletePost(post.id, owner.id);
+    deleteConfirmationOpen.value = false;
+    await selectBlogScope("mine");
+  } catch (error) {
+    deleteError.value =
+      error instanceof Error
+        ? error.message
+        : "게시글을 삭제하지 못했어요. 다시 시도해 주세요.";
+  }
+}
+function startWriting(draftId?: string) {
+  return router.push({ name: "blog-write", params: { draftId } });
+}
+async function continueEditing() {
+  if (!article.value || !user.value) return;
+  try {
+    const draft = await editPost(article.value, user.value.id);
+    await startWriting(draft.id);
+  } catch {
+    storageError.value = "편집할 글을 불러오지 못했어요. 다시 시도해 주세요.";
+  }
+}
+watch(
+  () => user.value?.id,
+  () => {
+    blogLocations.clear();
+    if (isBlogRoute.value)
+      void router.replace({ name: "blog", state: { blogPrevious: null } });
+  },
+);
+watch(
+  () => route.fullPath,
+  (path, previous) => {
+    deleteConfirmationOpen.value = false;
+    deleteError.value = "";
+    if (previous && router.resolve(previous).meta.blog) {
+      blogLocations.set(
+        previous,
+        dialog.value?.querySelector(".window-body, .article-body")?.scrollTop ??
+          0,
+      );
+    }
+    const scrollTop = blogLocations.get(path) ?? 0;
+    const view = route.query.view;
+    const previousPanel = panel.value;
+    const nextPanel = isBlogRoute.value
+      ? "blog"
+      : view === "portfolio" || view === "news" || view === "home"
+        ? view
+        : null;
+    if (!previousPanel && nextPanel)
+      previousFocus = document.activeElement as HTMLElement;
+    panel.value = nextPanel;
+    selectedProject.value = null;
+    newsSelection.value = null;
+    nextTick(() => {
+      if (nextPanel) {
+        if (nextPanel !== previousPanel)
+          dialog.value?.focus({ preventScroll: true });
+        restoreBlogScroll(scrollTop);
+      } else {
+        blogLocations.clear();
+        previousFocus?.focus();
+      }
+    });
+  },
+  { immediate: true },
 );
 const project = computed(() =>
   projects.find((p) => p.id === selectedProject.value),
@@ -172,6 +419,7 @@ const navItems: {
   { id: "blog", name: "블로그", icon: "book", number: "01" },
   { id: "portfolio", name: "포트폴리오", icon: "case", number: "02" },
   { id: "news", name: "최근 IT 이슈", icon: "news", number: "03" },
+  { id: "home", name: "내 집", icon: "home", number: "04" },
 ];
 function notify(message: string) {
   toast.value = message;
@@ -179,15 +427,6 @@ function notify(message: string) {
   toastTimer = setTimeout(() => {
     toast.value = "";
   }, 3500);
-}
-function startExplore() {
-  if (!ready.value && !error.value)
-    notify("동네를 준비하고 있어요. 잠시만 기다려 주세요.");
-  else if (error.value) notify("상단 메뉴에서 모든 콘텐츠를 둘러볼 수 있어요.");
-  else {
-    canvas.value?.focus();
-    notify("방향키로 이동해 보세요. 건물을 클릭해도 좋아요.");
-  }
 }
 function visit(id: Destination) {
   if (error.value) {
@@ -197,23 +436,13 @@ function visit(id: Destination) {
   if (!city) return;
   if (!city.visit(id)) notify("방향키로 입구에 가까이 이동해 주세요.");
 }
-async function openPanel(id: Destination) {
-  if (!panel.value) previousFocus = document.activeElement as HTMLElement;
-  panel.value = id;
-  selectedArticle.value = null;
-  selectedProject.value = null;
-  newsSelection.value = null;
-  category.value = "전체";
-  search.value = "";
-  await nextTick();
-  dialog.value?.focus();
+function openPanel(id: Destination) {
+  return id === "blog"
+    ? blogRouteTarget({ name: "blog", query: {} })
+    : router.push({ name: "city", query: { view: id } });
 }
 function closePanel() {
-  panel.value = null;
-  selectedArticle.value = null;
-  selectedProject.value = null;
-  newsSelection.value = null;
-  previousFocus?.focus();
+  return router.push({ name: "city" });
 }
 function home() {
   closePanel();
@@ -230,7 +459,12 @@ function keyDown(event: KeyboardEvent) {
         ...dialog.value.querySelectorAll<HTMLElement>(
           'button, a, input, [tabindex="0"]',
         ),
-      ].filter((el) => el.offsetParent !== null);
+      ].filter(
+        (el) =>
+          el.offsetParent !== null &&
+          el.tabIndex >= 0 &&
+          !el.matches(":disabled"),
+      );
       const first = focusable[0],
         last = focusable[focusable.length - 1];
       if (
@@ -296,9 +530,6 @@ watch(night, (value) => city?.setNight(value));
 watch(panel, (value) => city?.setPaused(Boolean(value)));
 onMounted(async () => {
   if (route.query.access === "denied") notify("관리자만 접근할 수 있어요.");
-  const view = route.query.view;
-  if (view === "blog" || view === "portfolio" || view === "news")
-    openPanel(view);
   window.addEventListener("keydown", keyDown);
   window.addEventListener("keyup", keyUp);
   window.addEventListener("blur", releaseKeys);
@@ -313,7 +544,7 @@ onMounted(async () => {
         labels.value = p;
       },
       enter: openPanel,
-      travelling: (id) => notify(`${places[id].name}로 이동하는 중이에요`),
+      travelling: (id) => notify(`${placeName(id)}으로 이동하는 중이에요`),
       ready: () => {
         ready.value = true;
       },
@@ -341,25 +572,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-shell" :class="{ 'is-night': night }">
-    <header class="site-header">
-      <button class="brand" aria-label="Codeiary 홈으로" @click="home">
-        <BrandLogo />
-      </button>
-      <nav aria-label="메인 메뉴">
-        <button
-          v-for="item in navItems"
-          :key="item.id"
-          :class="{ active: panel === item.id }"
-          @click="openPanel(item.id)"
-        >
-          {{ item.name }}<span v-if="item.id === 'news'" class="nav-new"></span>
-        </button>
-      </nav>
-      <div class="header-right">
-        <AccountActions />
-      </div>
-    </header>
-    <main class="city-board" aria-label="Codeiary 3D 도시">
+    <SiteHeader
+      :items="navItems"
+      :inactive="Boolean(panel)"
+      @home="home"
+      @navigate="openPanel"
+    />
+    <main class="city-board" aria-label="Codeiary 3D 도시" :inert="Boolean(panel)">
       <div class="sky-haze"></div>
       <canvas
         ref="canvas"
@@ -376,30 +595,13 @@ onBeforeUnmount(() => {
         <h1>Code <br /><span>Diary</span></h1>
         <p class="hero-subtitle">Wonseok’s Dev Story</p>
       </section>
-      <div v-if="ready" class="building-labels">
-        <button
-          v-for="label in labels"
-          :key="label.id"
-          class="building-label"
-          :class="[label.id, { nearby: near === label.id }]"
-          :style="{
-            left: `${label.x}px`,
-            top: `${label.y}px`,
-            visibility: label.visible ? 'visible' : 'hidden',
-            '--place-color': places[label.id].color,
-          }"
-          @click="visit(label.id)"
-        >
-          <span class="label-icon"
-            ><Icon
-              :name="navItems.find((i) => i.id === label.id)!.icon"
-              :size="18" /></span
-          ><span class="label-content"
-            ><small>{{ places[label.id].english }}</small
-            ><strong>{{ places[label.id].name }}</strong></span
-          ><Icon name="arrow" :size="14" /><span class="label-stem"></span>
-        </button>
-      </div>
+      <CityLabels
+        v-if="ready"
+        :labels="labels"
+        :near="near"
+        :home-name="placeName('home')"
+        @visit="visit"
+      />
       <div v-if="error" class="fallback-message">
         <Icon name="map" :size="36" /><strong
           >이야기는 계속 열려 있어요.</strong
@@ -420,7 +622,7 @@ onBeforeUnmount(() => {
           <svg
             class="map-svg"
             viewBox="0 0 220 130"
-            aria-label="플레이어 위치와 세 건물"
+            aria-label="플레이어 위치와 네 건물"
           >
             <rect width="220" height="130" rx="5" fill="#e9e9dc" />
             <path d="M202 0h18v130h-18z" fill="#a8c6bf" />
@@ -432,7 +634,7 @@ onBeforeUnmount(() => {
               stroke-dasharray="4 4"
             />
             <path
-              d="M12 8h25v21H12zM49 8h28v25H49zM99 7h24v21H99zM159 7h32v19h-32zM10 108h28v19H10zM52 105h24v22H52zM88 111h27v17H88zM161 108h28v20h-28zM14 41h24v23H14z"
+              d="M12 8h25v21H12zM49 8h28v25H49zM99 7h24v21H99zM159 7h32v19h-32zM10 108h28v19H10zM88 111h27v17H88zM161 108h28v20h-28zM14 41h24v23H14z"
               fill="#d1d4c1"
             />
             <rect x="90" y="46" width="24" height="23" rx="3" fill="#c5d0ad" />
@@ -490,6 +692,25 @@ onBeforeUnmount(() => {
                 fill="#d1b36d"
               />
               <circle cx="171" cy="55" r="5" fill="#f7ead7" />
+            </g>
+            <g
+              class="map-place"
+              role="button"
+              tabindex="0"
+              :aria-label="`${placeName('home')} 방문`"
+              @click="visit('home')"
+              @keydown.enter.prevent="visit('home')"
+              @keydown.space.prevent="visit('home')"
+            >
+              <rect
+                x="52"
+                y="105"
+                width="24"
+                height="22"
+                rx="3"
+                fill="#bd795b"
+              />
+              <path d="m59 116 5-4 5 4v6H59z" fill="#f7ead7" />
             </g>
             <circle
               :cx="(position.x + 50) * 2 + 10"
@@ -582,165 +803,166 @@ onBeforeUnmount(() => {
       </div>
     </main>
     <Transition name="modal"
-      ><div v-if="panel" class="modal-backdrop" @click.self="closePanel">
+      ><div
+        v-if="panel"
+        class="modal-backdrop content-backdrop"
+        @click.self="closePanel"
+      >
         <section
           ref="dialog"
           class="content-window"
           :class="panel"
           role="dialog"
           aria-modal="true"
-          :aria-label="places[panel].name"
+          :aria-label="placeName(panel)"
           tabindex="-1"
         >
-          <div class="window-topbar">
-            <span class="window-dots"><i></i><i></i><i></i></span
-            ><span
-              ><Icon
-                :name="navItems.find((i) => i.id === panel)?.icon || 'book'"
-                :size="14"
-              />{{ places[panel].english }}</span
-            ><button
-              class="close-button"
-              aria-label="창 닫기"
-              @click="closePanel"
-            >
-              <Icon name="close" :size="20" />
-            </button>
-          </div>
-          <template v-if="panel === 'blog'">
-            <div v-if="article" class="article-body">
-              <button class="text-back" @click="selectedArticle = null">
-                ← 모든 글로 돌아가기</button
-              ><span class="section-kicker"
-                >{{ article.category }} · SAMPLE ARTICLE</span
+          <SiteHeader
+            :items="navItems"
+            :active="panel"
+            @home="home"
+            @navigate="openPanel"
+            @close="closePanel"
+          />
+          <ContentActions
+            v-if="panel !== 'blog' || article || blogNotFound"
+            :action="contentAction"
+            :deletable="canDeleteArticle"
+            @action="handleContentAction"
+          />
+          <div
+            v-if="deleteConfirmationOpen && canDeleteArticle"
+            class="post-delete-confirmation"
+            role="alertdialog"
+            aria-modal="false"
+            aria-labelledby="post-delete-title"
+            aria-describedby="post-delete-description"
+          >
+            <div>
+              <h2 id="post-delete-title">게시글을 삭제할까요?</h2>
+              <p id="post-delete-description">삭제한 글은 복구할 수 없습니다.</p>
+              <p v-if="deleteError" class="post-delete-error" role="alert">
+                {{ deleteError }}
+              </p>
+            </div>
+            <div class="post-delete-confirmation-actions">
+              <button
+                autofocus
+                class="post-delete-cancel"
+                @click="deleteConfirmationOpen = false"
               >
-              <h2>{{ article.title }}</h2>
-              <div class="article-meta">
-                CODEIARY <span>·</span>{{ article.date }}<span>·</span
-                >{{ article.read }} 읽기
-              </div>
-              <div class="article-illustration" :class="article.art">
-                <span v-if="article.art === 'city'" class="art-city"
-                  ><i></i><i></i><i></i><i></i></span
-                ><span v-else class="art-letter">{{
-                  article.art === "vue"
-                    ? "V"
-                    : article.art === "code"
-                      ? "{ }"
-                      : "↗"
-                }}</span>
-              </div>
-              <p class="article-lead">{{ article.description }}</p>
-              <h3>작은 아이디어에서 시작하기</h3>
-              <p>
-                좋은 경험은 거창한 기능보다 작은 질문에서 시작됩니다. 무엇을
-                전달하고 싶은지, 어떤 순간이 기억에 남을지 생각하며 하나씩
-                만들어 봅니다.
-              </p>
-              <blockquote>
-                코드를 쓰는 일은, 누군가가 머물고 싶은 공간을 만드는 일.
-              </blockquote>
-              <h3>직접 만들어 보며 배우기</h3>
-              <p>
-                이 동네도 그런 실험의 하나입니다. 건물은 콘텐츠가 되고, 길은
-                탐색이 됩니다. 기술과 디자인 사이에서 균형을 찾는 과정에
-                앞으로의 개발 이야기를 차곡차곡 쌓아갈 예정입니다.
-              </p>
-              <div class="demo-note">
-                메인 페이지 동작을 보여주기 위한 샘플 글입니다. 실제 블로그
-                콘텐츠로 교체할 수 있어요.
+                취소
+              </button>
+              <button class="post-delete-submit" @click="deleteCurrentPost">
+                게시글 삭제
+              </button>
+            </div>
+          </div>
+          <h2 id="content-panel-title" class="visually-hidden">
+            {{ panel === "blog" ? blogTitle : placeName(panel) }}
+          </h2>
+          <p
+            v-if="panel === 'blog' && isOwnBlog && storageError"
+            class="blog-storage-error"
+            role="alert"
+          >
+            {{ storageError }}
+          </p>
+          <UserHome
+            v-if="panel === 'home'"
+            :profile="homeProfile"
+            :posts="homePosts"
+            @blog="openAuthorBlog(homeProfile.owner)"
+            @post="openPost"
+          />
+          <template v-else-if="panel === 'blog'">
+            <div v-if="blogNotFound" class="window-body blog-body">
+              <div class="empty-state blog-empty-state">
+                <span class="blog-empty-icon"
+                  ><Icon name="book" :size="32"
+                /></span>
+                <h3>
+                  {{
+                    route.params.postSlug
+                      ? "글을 찾을 수 없어요"
+                      : "블로그를 찾을 수 없어요"
+                  }}
+                </h3>
+                <p>주소를 확인하거나 Blog House에서 다른 글을 둘러보세요.</p>
+                <button @click="selectBlogScope('all')">
+                  Blog House 둘러보기 <Icon name="arrow-right" :size="16" />
+                </button>
               </div>
             </div>
-            <div v-else class="window-body">
-              <div class="window-heading">
+            <div v-else-if="article" class="article-body">
+              <PostArticle
+                :key="article.id"
+                :post="article"
+                @select-tag="selectBlogTag"
+                @select-author="openAuthorBlog"
+              >
+                <div class="article-illustration">
+                  <DefaultPostCover />
+                </div>
+                <p class="article-lead">{{ article.description }}</p>
+                <h3>작은 아이디어에서 시작하기</h3>
+                <p>
+                  좋은 경험은 거창한 기능보다 작은 질문에서 시작됩니다. 무엇을
+                  전달하고 싶은지, 어떤 순간이 기억에 남을지 생각하며 하나씩
+                  만들어 봅니다.
+                </p>
+                <blockquote>
+                  코드를 쓰는 일은, 누군가가 머물고 싶은 공간을 만드는 일.
+                </blockquote>
+                <h3>직접 만들어 보며 배우기</h3>
+                <p>
+                  이 동네도 그런 실험의 하나입니다. 건물은 콘텐츠가 되고, 길은
+                  탐색이 됩니다. 기술과 디자인 사이에서 균형을 찾는 과정에
+                  앞으로의 개발 이야기를 차곡차곡 쌓아갈 예정입니다.
+                </p>
+                <div class="demo-note">
+                  메인 페이지 동작을 보여주기 위한 샘플 글입니다. 실제 블로그
+                  콘텐츠로 교체할 수 있어요.
+                </div>
+              </PostArticle>
+            </div>
+            <div v-else class="window-body blog-body">
+              <header class="window-heading">
                 <div>
-                  <span class="section-kicker">01 / THE BLOG HOUSE</span>
-                  <h2>생각을 짓는 곳<span>.</span></h2>
-                  <p>배운 것, 만든 것, 그리고 그 사이의 이야기.</p>
+                  <span class="section-kicker">01 / BLOG HOUSE</span>
+                  <h2>나만의 이야기로 기록해보세요<span>.</span></h2>
                 </div>
                 <span class="heading-icon blog-icon"
                   ><Icon name="book" :size="32"
                 /></span>
-              </div>
-              <div class="blog-filter">
-                <div class="filter-tabs">
-                  <button
-                    v-for="tab in ['전체', '개발 기록', '프론트엔드']"
-                    :key="tab"
-                    :class="{ selected: category === tab }"
-                    @click="category = tab"
-                  >
-                    {{ tab }}
-                  </button>
-                </div>
-                <label class="search-input"
-                  ><svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                  >
-                    <circle cx="10" cy="10" r="6" />
-                    <path d="m15 15 5 5" /></svg
-                  ><input
-                    v-model="search"
-                    placeholder="이야기 찾기"
-                    aria-label="블로그 글 검색"
-                /></label>
-              </div>
-              <div class="post-grid">
-                <button
-                  v-for="post in filteredPosts"
-                  :key="post.id"
-                  class="post-card"
-                  @click="selectedArticle = post.id"
-                >
-                  <div class="post-art" :class="post.art">
-                    <span v-if="post.art === 'city'" class="art-city"
-                      ><i></i><i></i><i></i><i></i></span
-                    ><span v-else class="art-letter">{{
-                      post.art === "vue"
-                        ? "V"
-                        : post.art === "code"
-                          ? "{ }"
-                          : "↗"
-                    }}</span
-                    ><span class="art-caption">{{
-                      post.art === "city"
-                        ? "A LITTLE WORLD OF IDEAS"
-                        : post.art === "motion"
-                          ? "MAKE IT FEEL ALIVE"
-                          : post.art === "code"
-                            ? "CODE WITH CHARACTER"
-                            : "BEHIND THE REACTIVITY"
-                    }}</span>
-                  </div>
-                  <div class="post-content">
-                    <span class="post-category">{{ post.category }}</span>
-                    <h3>{{ post.title }}</h3>
-                    <p>{{ post.description }}</p>
-                    <div class="post-footer">
-                      <span>{{ post.date }}</span
-                      ><span
-                        ><Icon name="clock" :size="12" />{{ post.read
-                        }}<Icon name="arrow" :size="15"
-                      /></span>
-                    </div>
-                  </div>
-                </button>
-              </div>
-              <div v-if="!filteredPosts.length" class="empty-state">
-                아직 그 이야기는 없네요.<br /><span
-                  >다른 검색어로 찾아보세요.</span
-                >
-              </div>
-              <div class="window-footer">
-                <span class="demo-label">DEMO CONTENT</span
-                ><span>앞으로 더 많은 이야기가 이곳에 쌓일 거예요.</span
-                ><Icon name="spark" :size="14" />
-              </div>
+              </header>
+              <BlogPostList
+                :posts="scopedPosts"
+                :personal="blogScope !== 'all'"
+                :own="isOwnBlog"
+                :search="search"
+                :category="selectedCategory"
+                :tag="selectedTag"
+                :sort="postSort"
+                :page="blogPage"
+                @update:page="selectBlogPage"
+                @update:search="updateBlogQuery('q', $event)"
+                @update:category="updateBlogQuery('category', $event)"
+                @update:tag="selectBlogTag"
+                @update:sort="
+                  updateBlogQuery('sort', $event === 'latest' ? '' : $event)
+                "
+                @open="openArticle"
+                @author="openAuthorBlog"
+                @write="startWriting()"
+              >
+                <template #actions>
+                  <ContentActions
+                    :action="contentAction"
+                    @action="handleContentAction"
+                  />
+                </template>
+              </BlogPostList>
             </div>
           </template>
           <template v-else-if="panel === 'portfolio'">
@@ -771,16 +993,6 @@ onBeforeUnmount(() => {
                     : "포트폴리오 레이아웃을 보여주기 위한 콘셉트 프로젝트입니다."
                 }}
               </div>
-              <button
-                v-if="project.id === 1"
-                class="explore-button"
-                @click="
-                  closePanel();
-                  startExplore();
-                "
-              >
-                동네로 돌아가기 <span><Icon name="arrow" :size="18" /></span>
-              </button>
             </div>
             <div v-else class="window-body">
               <div class="window-heading">
@@ -899,18 +1111,6 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </template>
-          <div class="window-bottom-nav">
-            <button
-              v-for="item in navItems"
-              :key="item.id"
-              :class="{ current: panel === item.id }"
-              @click="openPanel(item.id)"
-            >
-              <Icon :name="item.icon" :size="16" />{{ item.name }}</button
-            ><button class="return-city" @click="closePanel">
-              <Icon name="walk" :size="16" />동네로 돌아가기
-            </button>
-          </div>
         </section>
       </div></Transition
     >

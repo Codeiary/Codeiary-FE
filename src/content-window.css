@@ -1,0 +1,101 @@
+.modal-backdrop.content-backdrop {
+  padding: 0;
+}
+.content-backdrop > .content-window {
+  width: 100%;
+  height: 100dvh;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: var(--font-size-min);
+  position: relative;
+}
+.content-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.content-window > .content-actions {
+  min-height: 48px;
+  padding: 12px clamp(20px, 3.5vw, 56px) 0;
+}
+.content-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: var(--theme-muted);
+  font-size: var(--font-size-min);
+  white-space: nowrap;
+}
+.content-exit:hover {
+  background: var(--theme-raised);
+  color: var(--theme-text);
+}
+.content-window > .window-body {
+  flex: 1;
+  min-height: 0;
+  padding: 24px clamp(24px, 3.5vw, 56px) 0;
+  scrollbar-gutter: stable;
+}
+.content-window > .article-body {
+  flex: 1;
+  min-height: 0;
+  padding: 40px max(24px, calc((100% - 820px) / 2)) 56px;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
+.content-window .article-body p {
+  max-width: none;
+  font-size: 16px;
+}
+.content-window .article-body .article-lead {
+  font-size: 19px;
+}
+.content-window .article-meta,
+.content-window .text-back {
+  font-size: var(--font-size-min);
+}
+.content-window .article-illustration {
+  height: 300px;
+}
+@media (max-width: 600px) {
+  .site-header-content .brand-wordmark {
+    display: none;
+  }
+  .content-window > .window-body {
+    padding: 24px 20px 0;
+  }
+  .content-window > .article-body {
+    padding: 28px 22px 36px;
+  }
+  .content-window .article-body h2 {
+    font-size: 29px;
+  }
+  .content-window .article-body p {
+    font-size: 15px;
+  }
+  .content-window .article-body .article-lead {
+    font-size: 17px;
+  }
+  .content-window .article-illustration {
+    height: 220px;
+  }
+}
+@media (max-width: 380px) {
+  .site-header-content {
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .site-header-content .site-header-actions {
+    gap: 2px;
+  }
+  .site-header-content .site-menu-toggle {
+    width: 36px;
+  }
+}
