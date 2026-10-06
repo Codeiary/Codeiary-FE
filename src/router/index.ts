@@ -19,6 +19,18 @@ const router = createRouter({
       meta: { title: "로그인 — Codeiary" },
     },
     {
+      path: "/auth/callback",
+      name: "oauth-callback",
+      component: () => import("@/views/OAuthCallbackView.vue"),
+      meta: { title: "Google 로그인 — Codeiary" },
+    },
+    {
+      path: "/onboarding",
+      name: "onboarding",
+      component: () => import("@/views/OnboardingView.vue"),
+      meta: { requiresAuth: true, title: "프로필 설정 — Codeiary" },
+    },
+    {
       path: "/admin/login",
       redirect: { name: "login", query: { redirect: "/admin" } },
     },

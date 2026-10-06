@@ -1,4 +1,4 @@
-import { readonly, ref, shallowRef } from "vue";
+import { computed, readonly, ref, shallowRef } from "vue";
 import { AuthError, createAuthApi } from "@/services/auth-api";
 
 export { AuthError } from "@/services/auth-api";
@@ -9,6 +9,7 @@ export interface UserProfile {
   name: string;
   nickname?: string | null;
   profileImageUrl?: string | null;
+  onboardingCompleted?: boolean;
   role: "ADMIN" | "USER";
 }
 
@@ -150,19 +151,25 @@ export function createAuthSession(
     return initialization;
   }
 
-  async function login(email: string, password: string) {
+  async function exchangeOAuthCode(code: string, state: string) {
     await restore();
     if (logoutRequest) await logoutRequest;
     if (refreshRequest) await refreshRequest.catch(() => undefined);
     revision++;
-    const tokens = await api.post<TokenResponse>("/auth/login", {
-      email,
-      password,
+    const currentRevision = revision;
+    const tokens = await api.post<TokenResponse>("/auth/oauth2/exchange", {
+      code,
+      state,
     });
+    if (currentRevision !== revision || signingOut.value)
+      throw new AuthError(401, "SESSION_CHANGED", expiredMessage);
     acceptTokens(tokens);
   }
 
-  async function authorizedRequest<T>(path: string): Promise<T> {
+  async function authorizedRequest<T>(
+    path: string,
+    init: RequestInit = {},
+  ): Promise<T> {
     await restore();
     if (signingOut.value)
       throw new AuthError(401, "SIGNING_OUT", expiredMessage);
@@ -171,7 +178,11 @@ export function createAuthSession(
     const currentRevision = revision;
     try {
       return await api.request<T>(path, {
-        headers: { Authorization: `Bearer ${token}` },
+        ...init,
+        headers: {
+          ...Object.fromEntries(new Headers(init.headers).entries()),
+          Authorization: `Bearer ${token}`,
+        },
       });
     } catch (error) {
       if (
@@ -184,7 +195,11 @@ export function createAuthSession(
       if (accessToken === token) await refresh();
       try {
         return await api.request<T>(path, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          ...init,
+          headers: {
+            ...Object.fromEntries(new Headers(init.headers).entries()),
+            Authorization: `Bearer ${accessToken}`,
+          },
         });
       } catch (retryError) {
         if (
@@ -198,6 +213,31 @@ export function createAuthSession(
         throw retryError;
       }
     }
+  }
+
+  async function checkNickname(nickname: string) {
+    return authorizedRequest<{ available: boolean }>(
+      `/users/nickname-availability?nickname=${encodeURIComponent(nickname.trim())}`,
+    );
+  }
+  async function completeOnboarding(nickname: string, photo: File | null) {
+    const currentRevision = revision;
+    const form = new FormData();
+    form.set("nickname", nickname.trim());
+    if (photo) form.set("profileImage", photo);
+    const profile = await authorizedRequest<UserProfile>(
+      "/users/me/onboarding",
+      { method: "POST", body: form },
+    );
+    if (currentRevision !== revision || signingOut.value)
+      throw new AuthError(401, "SESSION_CHANGED", expiredMessage);
+    if (!profile.nickname || profile.onboardingCompleted !== true)
+      throw new AuthError(
+        0,
+        "INVALID_RESPONSE",
+        "프로필 저장 결과를 확인하지 못했어요.",
+      );
+    user.value = profile;
   }
 
   async function verifyAdmin() {
@@ -239,7 +279,10 @@ export function createAuthSession(
     notice: readonly(notice),
     signingOut: readonly(signingOut),
     restore,
-    login,
+    exchangeOAuthCode,
+    checkNickname,
+    completeOnboarding,
+    needsOnboarding: computed(() => user.value?.onboardingCompleted === false),
     logout,
     verifyAdmin,
     authorizedRequest,
@@ -247,4 +290,10 @@ export function createAuthSession(
   };
 }
 
-export const auth = createAuthSession();
+export const auth = createAuthSession({
+  fetch:
+    import.meta.env.DEV && import.meta.env.VITE_AUTH_MOCK !== "false"
+      ? async (input, init) =>
+          (await import("@/services/mock-oauth")).mockOAuthFetch(input, init)
+      : undefined,
+});

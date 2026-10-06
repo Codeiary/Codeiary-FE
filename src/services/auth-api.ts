@@ -15,7 +15,9 @@ export function createAuthApi(
 ) {
   const requestFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const baseUrl = (
-    options.baseUrl ?? import.meta.env.VITE_API_BASE_URL ?? "/api"
+    options.baseUrl ??
+    import.meta.env.VITE_API_BASE_URL ??
+    "/api"
   ).replace(/\/$/, "");
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -34,17 +36,21 @@ export function createAuthApi(
         const code =
           typeof body.code === "string" ? body.code : "REQUEST_FAILED";
         const message =
-          code === "INVALID_CREDENTIALS"
-            ? "이메일 또는 비밀번호를 확인해 주세요."
-            : response.status === 401
-              ? expiredMessage
-              : response.status === 403
-                ? "관리자만 접근할 수 있어요."
-                : response.status === 429
-                  ? "요청이 많아요. 잠시 후 다시 시도해 주세요."
-                  : response.status === 400
-                    ? "입력한 내용을 다시 확인해 주세요."
-                    : "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.";
+          code === "NICKNAME_TAKEN"
+            ? "이미 사용 중인 닉네임이에요."
+            : code === "INVALID_NICKNAME"
+              ? "닉네임 형식을 확인해 주세요."
+              : code === "INVALID_OAUTH_CODE"
+                ? "Google 로그인 요청이 만료되었어요. 다시 로그인해 주세요."
+                : response.status === 401
+                  ? expiredMessage
+                  : response.status === 403
+                    ? "관리자만 접근할 수 있어요."
+                    : response.status === 429
+                      ? "요청이 많아요. 잠시 후 다시 시도해 주세요."
+                      : response.status === 400
+                        ? "입력한 내용을 다시 확인해 주세요."
+                        : "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.";
         throw new AuthError(response.status, code, message);
       }
       return response.status === 204 ? (undefined as T) : await response.json();
