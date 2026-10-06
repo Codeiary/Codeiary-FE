@@ -546,10 +546,35 @@
     height: 14px;
   }
   .blog-search-controls {
-    gap: 8px;
+    gap: 6px;
+  }
+  .blog .search-input {
+    min-height: 36px;
+    padding-inline: 9px;
+    gap: 6px;
+    border-radius: 7px;
   }
   .blog .search-input input {
-    font-size: 16px;
+    padding-block: 8px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .blog .search-input > svg {
+    width: 14px;
+    height: 14px;
+  }
+  .blog .post-sort {
+    min-height: 36px;
+    padding: 2px;
+    gap: 1px;
+    border-radius: 7px;
+  }
+  .blog .post-sort button {
+    min-height: 32px;
+    padding: 3px 7px;
+    font-size: 11px;
+    line-height: 18px;
+    border-radius: 5px;
   }
   .blog .post-grid {
     grid-template-columns: minmax(0, 1fr);
