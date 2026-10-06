@@ -20,6 +20,8 @@ import { authorSlug, postSlug } from "@/utils/blog/slug";
 import BlogPostList from "@/components/blog/BlogPostList.vue";
 import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
 import PostArticle from "@/components/blog/PostArticle.vue";
+import PostComments from "@/components/blog/comments/PostComments.vue";
+import { commentPostKey } from "@/utils/blog/comments";
 import { editPost } from "@/services/blog-storage";
 import { deletePost, loadLocalPosts, localPosts } from "@/store/blog";
 import UserHome from "@/components/profile/UserHome.vue";
@@ -945,6 +947,7 @@ onBeforeUnmount(() => {
                   콘텐츠로 교체할 수 있어요.
                 </div>
               </PostArticle>
+              <PostComments :key="commentPostKey(article)" :post="article" />
             </div>
             <div v-else class="window-body blog-body">
               <header class="window-heading">

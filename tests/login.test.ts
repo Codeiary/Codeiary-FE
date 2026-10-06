@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import LoginPage from "@/views/LoginView.vue";
 import AccountActions from "@/components/AccountActions.vue";
 import { auth, AuthError } from "@/store/auth";
+import { loginDestination } from "@/router/auth-guard";
 import { credentials, deferred, userFixture } from "./fixtures/auth";
 
 vi.mock("@/store/auth", async (original) => {
@@ -50,6 +51,20 @@ async function fillForm(wrapper: VueWrapper) {
 }
 
 describe("로그인 화면", () => {
+  it("댓글에서 로그인하면 원래 게시글로 돌아가고 외부 주소는 차단할 수 있다.", () => {
+    expect(loginDestination("/blog/커밋여행자/첫-기록?from=comments")).toBe(
+      "/blog/커밋여행자/첫-기록?from=comments",
+    );
+    for (const path of [
+      "https://example.com",
+      "//example.com",
+      "/blog\\example.com",
+      "/unknown",
+    ]) {
+      expect(loginDestination(path)).toBe("/");
+    }
+  });
+
   beforeEach(() => {
     user.value = null;
     vi.mocked(auth.login).mockReset();

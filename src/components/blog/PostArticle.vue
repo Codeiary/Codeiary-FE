@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { displayName } from "@/utils/profile/display-name";
+import { useArticleHeading } from "@/composables/useArticleHeading";
 import { defineAsyncComponent, ref } from "vue";
 import Icon from "@/components/Icon.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
@@ -40,6 +41,7 @@ defineEmits<{
 }>();
 const root = ref<HTMLElement>();
 const headings = ref<ArticleHeading[]>([]);
+const activeHeading = useArticleHeading(root, headings);
 function scrollToHeading(id: string) {
   const heading = Array.from(
     root.value?.querySelectorAll<HTMLElement>(".markdown-content [id]") ?? [],
@@ -128,6 +130,7 @@ function scrollToHeading(id: string) {
     <ArticleOutline
       v-if="showHeader"
       :headings="headings"
+      :active-id="activeHeading"
       @navigate="scrollToHeading"
     />
   </div>

@@ -8,6 +8,7 @@ export interface UserProfile {
   email: string;
   name: string;
   nickname?: string | null;
+  profileImageUrl?: string | null;
   role: "ADMIN" | "USER";
 }
 

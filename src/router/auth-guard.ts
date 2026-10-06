@@ -3,6 +3,11 @@ import { AuthError, auth } from "@/store/auth";
 
 // Only known app destinations are accepted; query strings cannot create external redirects.
 export function loginDestination(value: unknown) {
+  if (
+    typeof value === "string" &&
+    /^\/blog(?:\/[^/?#\\]+){0,2}(?:\?[^#\\]*)?(?:#[^\\]*)?$/.test(value)
+  )
+    return value;
   if (typeof value === "string" && /^\/write(?:\/[a-f0-9-]{36})?$/.test(value))
     return value;
   return value === "/admin" && auth.user.value?.role === "ADMIN"

@@ -20,6 +20,7 @@ const labels = {
       v-if="action"
       :class="[
         action === 'write' ? 'blog-write-button' : 'blog-my-posts',
+        { 'content-action-edit': action === 'edit' },
       ]"
       :aria-label="labels[action].accessible"
       @click="$emit('action', action)"
