@@ -22,6 +22,19 @@ function render() {
 }
 
 describe("사용자의 집", () => {
+  it("사용자 이름 대신 닉네임을 집과 블로그 이동에 사용할 수 있다.", async () => {
+    const wrapper = render();
+    const profile = createMockHome({
+      ...userFixture(),
+      nickname: "커밋여행자",
+    });
+    await wrapper.setProps({ profile });
+    expect(wrapper.get(".home-profile h3").text()).toBe("커밋여행자");
+    await wrapper.get(".home-section-action button").trigger("click");
+    expect(wrapper.emitted("blog")).toHaveLength(1);
+    expect(profile.owner.nickname).toBe("커밋여행자");
+  });
+
   it("로그인한 사용자의 이름과 이메일 및 GitHub 링크를 표시할 수 있다.", () => {
     const wrapper = render();
     expect(wrapper.get(".home-profile h3").text()).toBe(

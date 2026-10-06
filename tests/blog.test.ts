@@ -6,6 +6,9 @@ import CityApp from "@/views/CityView.vue";
 import { auth, type UserProfile } from "@/store/auth";
 import { userFixture } from "./fixtures/auth";
 import { cityRoutes } from "@/router/city-routes";
+import { mockAccountProgress } from "@/services/mock-neighborhood";
+
+const setHome = vi.hoisted(() => vi.fn());
 
 vi.mock("@/utils/blog/posts", async () => {
   const { blogPostsFixture } = await import("./fixtures/blog");
@@ -21,6 +24,12 @@ vi.mock("@/utils/city/world", () => ({
     setNight: vi.fn(),
     dispose: vi.fn(),
     setInput: vi.fn(),
+    setJoystick: vi.fn(),
+    setRunning: vi.fn(),
+    setHome,
+    setNeighborhood: vi.fn(),
+    goToDistrict: vi.fn(),
+    visitResidence: vi.fn(),
   }),
 }));
 
@@ -55,6 +64,7 @@ function titles(wrapper: VueWrapper) {
 describe("블로그 글 목록", () => {
   beforeEach(() => {
     user.value = null;
+    setHome.mockClear();
   });
   afterEach(() => {
     wrappers.splice(0).forEach((wrapper) => {
@@ -71,6 +81,27 @@ describe("블로그 글 목록", () => {
       "다른 사람의 글",
       "기존 예시 글",
     ]);
+  });
+
+  it("로그인과 계정 전환 및 로그아웃에 맞춰 메인 집 레벨을 갱신할 수 있다.", async () => {
+    mockAccountProgress[1] = { level: 5, activityPoints: null };
+    mockAccountProgress[2] = { level: 1, activityPoints: null };
+    try {
+      await render();
+      expect(setHome).toHaveBeenLastCalledWith(null);
+      user.value = userFixture("USER");
+      await flushPromises();
+      expect(setHome).toHaveBeenLastCalledWith(5);
+      user.value = { ...userFixture("USER"), id: 2 };
+      await flushPromises();
+      expect(setHome).toHaveBeenLastCalledWith(1);
+      user.value = null;
+      await flushPromises();
+      expect(setHome).toHaveBeenLastCalledWith(null);
+    } finally {
+      delete mockAccountProgress[1];
+      delete mockAccountProgress[2];
+    }
   });
 
   it("내 블로그에서 본인 글과 비공개 글을 볼 수 있다.", async () => {
@@ -168,8 +199,13 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     await wrapper.findAll(".post-sort button")[1]!.trigger("click");
     await flushPromises();
-    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({ q: "Vue", sort: "views" });
-    expect(wrapper.get('[aria-current="page"][aria-label="1페이지"]').text()).toBe("1");
+    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({
+      q: "Vue",
+      sort: "views",
+    });
+    expect(
+      wrapper.get('[aria-current="page"][aria-label="1페이지"]').text(),
+    ).toBe("1");
   });
 
   it("전체 글을 검색하고 결과가 없으면 검색어를 초기화할 수 있다.", async () => {
@@ -310,9 +346,11 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     await wrapper.findAll(".post-open")[1]!.trigger("click");
     await flushPromises();
-    await wrapper.get('.content-exit').trigger("click");
+    await wrapper.get(".content-exit").trigger("click");
     await flushPromises();
-    await wrapper.findAll(".site-header:not([inert]) nav > button")[0]!.trigger("click");
+    await wrapper
+      .findAll(".site-header:not([inert]) nav > button")[0]!
+      .trigger("click");
     await flushPromises();
     expect(wrapper.get("#content-panel-title").text()).toBe("Blog House");
     await wrapper.get('[aria-label="기록자의 블로그 보기"]').trigger("click");
