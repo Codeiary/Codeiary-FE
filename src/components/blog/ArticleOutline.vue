@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import OutlineBranch from "@/components/blog/OutlineBranch.vue";
-import { buildHeadingTree, type ArticleHeading } from "@/utils/blog/heading-outline";
-const props = defineProps<{ headings: ArticleHeading[] }>();
+import {
+  buildHeadingTree,
+  type ArticleHeading,
+} from "@/utils/blog/heading-outline";
+const props = defineProps<{ headings: ArticleHeading[]; activeId?: string }>();
 defineEmits<{ navigate: [id: string] }>();
 const tree = computed(() => buildHeadingTree(props.headings));
 </script>
 <template>
   <aside v-if="headings.length" class="article-outline">
     <nav aria-label="소제목 목차">
-      <OutlineBranch :nodes="tree" @navigate="$emit('navigate', $event)" />
+      <OutlineBranch
+        :nodes="tree"
+        :active-id="activeId"
+        @navigate="$emit('navigate', $event)"
+      />
     </nav>
   </aside>
 </template>
