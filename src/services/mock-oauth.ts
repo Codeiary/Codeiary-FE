@@ -2,7 +2,7 @@ import type { UserProfile } from "@/store/auth";
 import { nicknameError } from "@/utils/auth/validation";
 
 const PROFILE_KEY = "codeiary.oauth.mock.profile";
-const TOKEN_KEY = "codeiary.oauth.mock.tokens";
+const SESSION_KEY = "codeiary.oauth.mock.session";
 const usedNicknames = new Set([
   "codeiary",
   "관리자",
@@ -28,24 +28,15 @@ function profile(): UserProfile {
         onboardingCompleted: false,
       };
 }
-function tokens() {
-  const pair = {
-    accessToken: `mock-access-${crypto.randomUUID()}`,
-    refreshToken: `mock-refresh-${crypto.randomUUID()}`,
-  };
-  sessionStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-  return {
-    ...pair,
-    tokenType: "Bearer",
-    expiresIn: 1800,
-    refreshExpiresIn: 604800,
-    user: profile(),
-  };
+export function startMockOAuthSession() {
+  if (!import.meta.env.DEV) throw new Error("개발 환경에서만 사용할 수 있어요.");
+  sessionStorage.removeItem("codeiary.oauth.mock.tokens");
+  sessionStorage.setItem(SESSION_KEY, "active");
 }
 function available(nickname: string) {
   return !usedNicknames.has(nickname.trim().toLocaleLowerCase());
 }
-// Dev-only adapter. These opaque fixtures are never accepted by a real API.
+// Dev-only session marker simulates cookie authentication without storing token values.
 export const mockOAuthFetch: typeof fetch = async (input, init) => {
   const url = new URL(
     typeof input === "string"
@@ -56,32 +47,24 @@ export const mockOAuthFetch: typeof fetch = async (input, init) => {
     location.origin,
   );
   try {
-    if (url.pathname.endsWith("/auth/oauth2/exchange")) {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      if (!String(body.code).startsWith("preview-") || !body.state)
-        return json({ code: "INVALID_OAUTH_CODE" }, 401);
-      return json(tokens());
-    }
-    const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) ?? "null");
-    if (
-      url.pathname.endsWith("/auth/refresh") ||
-      url.pathname.endsWith("/auth/logout")
-    ) {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      if (!saved || body.refreshToken !== saved.refreshToken)
-        return json({ code: "INVALID_REFRESH_TOKEN" }, 401);
-      if (url.pathname.endsWith("/auth/logout")) {
-        sessionStorage.removeItem(TOKEN_KEY);
-        return new Response(null, { status: 204 });
-      }
-      return json(tokens());
-    }
-    if (
-      !saved ||
-      new Headers(init?.headers).get("Authorization") !==
-        `Bearer ${saved.accessToken}`
-    )
+    const signedIn = sessionStorage.getItem(SESSION_KEY) === "active";
+    const method = init?.method ?? "GET";
+    if (init?.credentials !== "include")
       return json({ code: "UNAUTHORIZED" }, 401);
+    if (url.pathname.endsWith("/auth/logout") && method === "POST") {
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem("codeiary.oauth.mock.tokens");
+      return new Response(null, { status: 204 });
+    }
+    if (!signedIn) return json({ code: "UNAUTHORIZED" }, 401);
+    if (url.pathname.endsWith("/auth/reissue") && method === "POST")
+      return new Response(null, { status: 204 });
+    if (url.pathname.endsWith("/users/me") && method === "GET")
+      return json(profile());
+    if (url.pathname.endsWith("/admin/me") && method === "GET")
+      return profile().role === "ADMIN"
+        ? json(profile())
+        : json({ code: "FORBIDDEN" }, 403);
     if (url.pathname.endsWith("/users/nickname-availability")) {
       const nickname = url.searchParams.get("nickname") ?? "";
       if (nicknameError(nickname))
