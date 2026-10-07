@@ -13,200 +13,114 @@ export interface UserProfile {
   role: "ADMIN" | "USER";
 }
 
-interface TokenResponse {
-  user: UserProfile;
-  accessToken: string;
-  refreshToken: string;
-  tokenType: "Bearer";
-  expiresIn: number;
-  refreshExpiresIn: number;
-}
-
-export const SESSION_KEY = "codeiary.session";
 const expiredMessage = "로그인이 만료되었어요. 다시 로그인해 주세요.";
 
 export function createAuthSession(
   options: {
     fetch?: typeof fetch;
-    storage?: () => Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
-    now?: () => number;
+    storage?: () => Pick<Storage, "removeItem"> | null;
     baseUrl?: string;
   } = {},
 ) {
   const api = createAuthApi(options);
-  const storage = options.storage ?? (() => window.sessionStorage);
-  const now = options.now ?? Date.now;
   const user = shallowRef<UserProfile | null>(null);
   const notice = ref("");
   const signingOut = ref(false);
-  let accessToken = "";
-  let accessExpiresAt = 0;
-  let refreshToken = "";
-  let refreshExpiresAt = 0;
   let revision = 0;
+  let refreshVersion = 0;
   let initialization: Promise<boolean> | undefined;
   let refreshRequest: Promise<void> | undefined;
   let logoutRequest: Promise<void> | undefined;
 
-  function persist() {
+  function clearLegacyTokens() {
     try {
-      if (refreshToken)
-        storage()?.setItem(
-          SESSION_KEY,
-          JSON.stringify({ refreshToken, refreshExpiresAt }),
-        );
-      else storage()?.removeItem(SESSION_KEY);
+      const storage = options.storage ? options.storage() : window.sessionStorage;
+      storage?.removeItem("codeiary.session");
+      storage?.removeItem("codeiary.oauth.mock.tokens");
     } catch {
-      // Storage can be unavailable in private mode. The in-memory session still works.
+      // Authentication uses browser cookies even when Web Storage is unavailable.
     }
   }
 
   function clearSession() {
     revision++;
     user.value = null;
-    accessToken = refreshToken = "";
-    accessExpiresAt = refreshExpiresAt = 0;
-    persist();
+    initialization = Promise.resolve(false);
+    clearLegacyTokens();
   }
 
-  function acceptTokens(tokens: TokenResponse) {
+  function acceptProfile(profile: UserProfile) {
     if (
-      !tokens.accessToken ||
-      !tokens.refreshToken ||
-      tokens.tokenType !== "Bearer" ||
-      !(tokens.expiresIn > 0) ||
-      !(tokens.refreshExpiresIn > 0) ||
-      !tokens.user ||
-      !["ADMIN", "USER"].includes(tokens.user.role)
+      !profile || !Number.isSafeInteger(profile.id) || profile.id <= 0 ||
+      typeof profile.email !== "string" || typeof profile.name !== "string" ||
+      !["ADMIN", "USER"].includes(profile.role)
     ) {
-      throw new AuthError(
-        0,
-        "INVALID_RESPONSE",
-        "로그인 응답을 확인하지 못했어요. 다시 시도해 주세요.",
-      );
+      throw new AuthError(0, "INVALID_RESPONSE", "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요.");
     }
-    accessToken = tokens.accessToken;
-    refreshToken = tokens.refreshToken;
-    accessExpiresAt = now() + tokens.expiresIn * 1000;
-    refreshExpiresAt = now() + tokens.refreshExpiresIn * 1000;
-    user.value = tokens.user;
+    user.value = profile;
     notice.value = "";
-    persist();
+  }
+
+  function requireCurrentSession(currentRevision: number) {
+    if (currentRevision !== revision || signingOut.value)
+      throw new AuthError(401, "SESSION_CHANGED", expiredMessage);
+  }
+
+  // Cookies are shared across tabs. Serialize rotation and logout where Web Locks are available.
+  function withSessionLock<T>(action: () => Promise<T>): Promise<T> {
+    if (typeof navigator !== "undefined" && navigator.locks)
+      return navigator.locks.request("codeiary.auth.session", action);
+    return action();
   }
 
   function refresh(): Promise<void> {
     if (refreshRequest) return refreshRequest;
     if (signingOut.value)
       return Promise.reject(new AuthError(401, "SIGNING_OUT", expiredMessage));
-    if (!refreshToken || refreshExpiresAt <= now()) {
-      clearSession();
-      notice.value = expiredMessage;
-      return Promise.reject(
-        new AuthError(401, "INVALID_REFRESH_TOKEN", expiredMessage),
-      );
-    }
     const currentRevision = revision;
-    refreshRequest = api
-      .post<TokenResponse>("/auth/refresh", { refreshToken })
-      .then((tokens) => {
-        if (currentRevision === revision) acceptTokens(tokens);
-      })
-      .catch((error: unknown) => {
-        if (currentRevision === revision && error instanceof AuthError) {
-          if (error.status === 400 || error.status === 401) clearSession();
-          notice.value = error.message;
+    refreshRequest = withSessionLock(async () => {
+      requireCurrentSession(currentRevision);
+      if (typeof navigator !== "undefined" && navigator.locks) {
+        try {
+          // Another tab may have already rotated the shared cookies while we waited.
+          await api.request<UserProfile>("/users/me");
+          refreshVersion++;
+          return;
+        } catch (error) {
+          if (!(error instanceof AuthError) || error.status !== 401) throw error;
         }
-        throw error;
-      })
-      .finally(() => {
-        refreshRequest = undefined;
-      });
+      }
+      requireCurrentSession(currentRevision);
+      await api.post<void>("/auth/reissue");
+      refreshVersion++;
+    }).catch((error: unknown) => {
+      if (currentRevision === revision && error instanceof AuthError) {
+        if (error.status === 401) clearSession();
+        notice.value = error.message;
+      }
+      throw error;
+    }).finally(() => {
+      refreshRequest = undefined;
+    });
     return refreshRequest;
   }
 
-  function restore(): Promise<boolean> {
-    if (initialization) return initialization;
-    initialization = (async () => {
-      try {
-        const saved = JSON.parse(storage()?.getItem(SESSION_KEY) ?? "null");
-        if (
-          typeof saved?.refreshToken === "string" &&
-          Number.isFinite(saved.refreshExpiresAt)
-        ) {
-          refreshToken = saved.refreshToken;
-          refreshExpiresAt = saved.refreshExpiresAt;
-        } else if (saved) persist();
-      } catch {
-        /* Missing or invalid browser storage does not prevent sign-in. */
-      }
-      if (refreshToken) {
-        try {
-          await refresh();
-        } catch {
-          /* The login page displays notice and allows retry. */
-        }
-      }
-      return user.value !== null;
-    })();
-    return initialization;
-  }
-
-  async function exchangeOAuthCode(code: string, state: string) {
-    await restore();
-    if (logoutRequest) await logoutRequest;
-    if (refreshRequest) await refreshRequest.catch(() => undefined);
-    revision++;
+  async function requestWithRefresh<T>(path: string, init: RequestInit = {}): Promise<T> {
     const currentRevision = revision;
-    const tokens = await api.post<TokenResponse>("/auth/oauth2/exchange", {
-      code,
-      state,
-    });
-    if (currentRevision !== revision || signingOut.value)
-      throw new AuthError(401, "SESSION_CHANGED", expiredMessage);
-    acceptTokens(tokens);
-  }
-
-  async function authorizedRequest<T>(
-    path: string,
-    init: RequestInit = {},
-  ): Promise<T> {
-    await restore();
-    if (signingOut.value)
-      throw new AuthError(401, "SIGNING_OUT", expiredMessage);
-    if (!accessToken || accessExpiresAt <= now() + 15_000) await refresh();
-    const token = accessToken;
-    const currentRevision = revision;
+    const currentRefreshVersion = refreshVersion;
+    requireCurrentSession(currentRevision);
     try {
-      return await api.request<T>(path, {
-        ...init,
-        headers: {
-          ...Object.fromEntries(new Headers(init.headers).entries()),
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      return await api.request<T>(path, init);
     } catch (error) {
-      if (
-        !(error instanceof AuthError) ||
-        error.status !== 401 ||
-        currentRevision !== revision
-      )
-        throw error;
-      // Concurrent 401 responses must reuse the token already rotated by the first request.
-      if (accessToken === token) await refresh();
+      if (!(error instanceof AuthError) || error.status !== 401) throw error;
+      requireCurrentSession(currentRevision);
+      // A late 401 reuses cookies already refreshed by another request.
+      if (currentRefreshVersion === refreshVersion) await refresh();
+      requireCurrentSession(currentRevision);
       try {
-        return await api.request<T>(path, {
-          ...init,
-          headers: {
-            ...Object.fromEntries(new Headers(init.headers).entries()),
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
+        return await api.request<T>(path, init);
       } catch (retryError) {
-        if (
-          retryError instanceof AuthError &&
-          retryError.status === 401 &&
-          currentRevision === revision
-        ) {
+        if (retryError instanceof AuthError && retryError.status === 401 && currentRevision === revision) {
           clearSession();
           notice.value = expiredMessage;
         }
@@ -215,49 +129,79 @@ export function createAuthSession(
     }
   }
 
+  async function loadProfile() {
+    const currentRevision = revision;
+    const profile = await requestWithRefresh<UserProfile>("/users/me");
+    requireCurrentSession(currentRevision);
+    acceptProfile(profile);
+  }
+
+  function restore(): Promise<boolean> {
+    if (initialization) return initialization;
+    clearLegacyTokens();
+    initialization = loadProfile().then(() => true).catch((error: unknown) => {
+      if (error instanceof AuthError && error.status === 401) {
+        if (!user.value && !signingOut.value) notice.value = "";
+      } else {
+        initialization = undefined;
+        notice.value = error instanceof Error ? error.message : "로그인 상태를 확인하지 못했어요.";
+      }
+      return false;
+    });
+    return initialization;
+  }
+
+  async function completeOAuthLogin() {
+    if (logoutRequest) await logoutRequest;
+    if (initialization) await initialization;
+    if (refreshRequest) await refreshRequest.catch(() => undefined);
+    revision++;
+    clearLegacyTokens();
+    await loadProfile();
+    initialization = Promise.resolve(true);
+  }
+
+  async function authorizedRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+    await restore();
+    return requestWithRefresh<T>(path, init);
+  }
+
   async function checkNickname(nickname: string) {
     return authorizedRequest<{ available: boolean }>(
       `/users/nickname-availability?nickname=${encodeURIComponent(nickname.trim())}`,
     );
   }
+
   async function completeOnboarding(nickname: string, photo: File | null) {
     const currentRevision = revision;
     const form = new FormData();
     form.set("nickname", nickname.trim());
     if (photo) form.set("profileImage", photo);
-    const profile = await authorizedRequest<UserProfile>(
-      "/users/me/onboarding",
-      { method: "POST", body: form },
-    );
-    if (currentRevision !== revision || signingOut.value)
-      throw new AuthError(401, "SESSION_CHANGED", expiredMessage);
+    const profile = await authorizedRequest<UserProfile>("/users/me/onboarding", { method: "POST", body: form });
+    requireCurrentSession(currentRevision);
     if (!profile.nickname || profile.onboardingCompleted !== true)
-      throw new AuthError(
-        0,
-        "INVALID_RESPONSE",
-        "프로필 저장 결과를 확인하지 못했어요.",
-      );
-    user.value = profile;
+      throw new AuthError(0, "INVALID_RESPONSE", "프로필 저장 결과를 확인하지 못했어요.");
+    acceptProfile(profile);
   }
 
   async function verifyAdmin() {
     const currentRevision = revision;
     const profile = await authorizedRequest<UserProfile>("/admin/me");
-    if (currentRevision !== revision || signingOut.value)
-      throw new AuthError(401, "SESSION_CHANGED", expiredMessage);
+    requireCurrentSession(currentRevision);
     if (profile.role !== "ADMIN")
       throw new AuthError(403, "FORBIDDEN", "관리자만 접근할 수 있어요.");
-    user.value = profile;
+    acceptProfile(profile);
   }
 
   function logout(): Promise<void> {
     if (logoutRequest) return logoutRequest;
     signingOut.value = true;
+    revision++;
     logoutRequest = (async () => {
-      await restore();
+      if (initialization) await initialization;
       if (refreshRequest) await refreshRequest.catch(() => undefined);
-      // Revoke on the server first. A failed request keeps the session available for retry.
-      if (refreshToken) await api.post<void>("/auth/logout", { refreshToken });
+      // Wait for Set-Cookie from rotation before revoking the current session.
+      await withSessionLock(() => api.post<void>("/auth/logout"));
       clearSession();
       notice.value = "";
     })().finally(() => {
@@ -268,9 +212,19 @@ export function createAuthSession(
   }
 
   async function revalidate() {
-    await restore();
-    if (user.value && accessExpiresAt <= now() + 15_000 && !signingOut.value) {
-      await refresh().catch(() => undefined);
+    if (signingOut.value) return;
+    if (!user.value && !initialization) {
+      await restore();
+      return;
+    }
+    const hadUser = user.value !== null;
+    try {
+      await loadProfile();
+      initialization = Promise.resolve(true);
+    } catch (error) {
+      if (error instanceof AuthError && error.code !== "SESSION_CHANGED") {
+        notice.value = error.status === 401 && !hadUser ? "" : error.message;
+      }
     }
   }
 
@@ -279,7 +233,7 @@ export function createAuthSession(
     notice: readonly(notice),
     signingOut: readonly(signingOut),
     restore,
-    exchangeOAuthCode,
+    completeOAuthLogin,
     checkNickname,
     completeOnboarding,
     needsOnboarding: computed(() => user.value?.onboardingCompleted === false),

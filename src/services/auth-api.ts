@@ -24,11 +24,14 @@ export function createAuthApi(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12_000);
     try {
+      const headers = new Headers(init.headers);
+      headers.set("Accept", "application/json");
+      headers.delete("Authorization");
       const response = await requestFetch(`${baseUrl}${path}`, {
         ...init,
-        headers: { Accept: "application/json", ...init.headers },
+        headers,
         signal: controller.signal,
-        credentials: "omit",
+        credentials: "include",
         cache: "no-store",
       });
       if (!response.ok) {
@@ -40,17 +43,15 @@ export function createAuthApi(
             ? "이미 사용 중인 닉네임이에요."
             : code === "INVALID_NICKNAME"
               ? "닉네임 형식을 확인해 주세요."
-              : code === "INVALID_OAUTH_CODE"
-                ? "Google 로그인 요청이 만료되었어요. 다시 로그인해 주세요."
-                : response.status === 401
-                  ? expiredMessage
-                  : response.status === 403
-                    ? "관리자만 접근할 수 있어요."
-                    : response.status === 429
-                      ? "요청이 많아요. 잠시 후 다시 시도해 주세요."
-                      : response.status === 400
-                        ? "입력한 내용을 다시 확인해 주세요."
-                        : "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.";
+              : response.status === 401
+                ? expiredMessage
+                : response.status === 403
+                  ? "관리자만 접근할 수 있어요."
+                  : response.status === 429
+                    ? "요청이 많아요. 잠시 후 다시 시도해 주세요."
+                    : response.status === 400
+                      ? "입력한 내용을 다시 확인해 주세요."
+                      : "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.";
         throw new AuthError(response.status, code, message);
       }
       return response.status === 204 ? (undefined as T) : await response.json();
@@ -66,11 +67,13 @@ export function createAuthApi(
     }
   }
 
-  function post<T>(path: string, body: object) {
+  function post<T>(path: string, body?: object) {
     return request<T>(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      ...(body === undefined ? {} : {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
     });
   }
 

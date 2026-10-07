@@ -11,8 +11,12 @@ export function loginDestination(value: unknown) {
 }
 
 export async function authGuard(to: RouteLocationNormalized) {
-  await auth.restore();
   if (to.name === "oauth-callback") return;
+  if (!to.meta.requiresAuth && !to.meta.requiresAdmin && to.name !== "login") {
+    void auth.restore();
+    return;
+  }
+  await auth.restore();
   if (auth.needsOnboarding.value && to.name !== "onboarding")
     return {
       name: "onboarding",
