@@ -6,45 +6,77 @@ import {
   safeAuthReturn,
 } from "@/utils/auth/oauth";
 import { createAuthSession } from "@/store/auth";
-import { mockOAuthFetch } from "@/services/mock-oauth";
-import { storageFixture } from "./fixtures/auth";
+import { mockOAuthFetch, startMockOAuthSession } from "@/services/mock-oauth";
 import { prepareAvatar } from "@/utils/profile/avatar-upload";
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
 });
 describe("OAuth 인증과 온보딩", () => {
-  it("한 번만 사용할 수 있는 로그인 상태를 검증하고 요청한 글 주소를 복원할 수 있다.", () => {
+  it("로그인 복귀 주소만 저장하고 한 번 복원할 수 있다.", () => {
     const url = new URL(googleLoginUrl("/blog/writer/post"), location.origin);
     expect(url.pathname).toBe("/auth/callback");
-    expect(consumeOAuthAttempt(url.searchParams.get("state"))).toBe(
-      "/blog/writer/post",
-    );
-    expect(() => consumeOAuthAttempt(url.searchParams.get("state"))).toThrow(
-      "만료",
-    );
+    expect(url.searchParams.has("code")).toBe(false);
+    expect(url.searchParams.has("state")).toBe(false);
+    expect(JSON.parse(sessionStorage.getItem(OAUTH_ATTEMPT_KEY)!)).toEqual({
+      redirect: "/blog/writer/post",
+      createdAt: expect.any(Number),
+    });
+    expect(consumeOAuthAttempt()).toBe("/blog/writer/post");
+    expect(consumeOAuthAttempt()).toBe("/");
   });
-  it("상태가 다르거나 만료된 로그인 응답을 거절할 수 있다.", () => {
-    googleLoginUrl("/");
-    expect(() => consumeOAuthAttempt("different")).toThrow("만료");
+  it("만료된 복귀 정보나 외부 주소 대신 홈으로 복귀할 수 있다.", () => {
     sessionStorage.setItem(
       OAUTH_ATTEMPT_KEY,
-      JSON.stringify({
-        state: "old",
-        createdAt: Date.now() - 600001,
-        redirect: "/",
-      }),
+      JSON.stringify({ createdAt: Date.now() - 600001, redirect: "/" }),
     );
-    expect(() => consumeOAuthAttempt("old")).toThrow("만료");
+    expect(consumeOAuthAttempt()).toBe("/");
     expect(safeAuthReturn("//example.com")).toBe("/");
   });
-  it("신규 프로필을 완성하고 JWT 세션 구조를 유지한 채 다음 로그인에서 온보딩을 건너뛸 수 있다.", async () => {
-    const session = createAuthSession({
-      fetch: mockOAuthFetch,
-      storage: () => storageFixture(),
+  it("앱 교환 코드 없이 백엔드 Google 로그인으로 이동할 수 있다.", async () => {
+    vi.stubEnv("VITE_AUTH_MOCK", "false");
+    vi.stubEnv("VITE_GOOGLE_AUTH_URL", "");
+    vi.resetModules();
+    try {
+      const { googleLoginUrl: realLoginUrl } = await import("@/utils/auth/oauth");
+      const url = new URL(realLoginUrl("/blog"), location.origin);
+      expect(url.pathname).toBe("/oauth2/authorization/google");
+      expect(url.search).toBe("");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+  it("저장소가 차단되어도 실제 Google 로그인을 시작하고 홈으로 복귀할 수 있다.", async () => {
+    vi.stubEnv("VITE_AUTH_MOCK", "false");
+    vi.stubEnv("VITE_GOOGLE_AUTH_URL", "");
+    vi.resetModules();
+    const setItem = vi.spyOn(sessionStorage, "setItem").mockImplementation(() => {
+      throw new Error("Storage blocked");
     });
-    await session.exchangeOAuthCode("preview-new", "state");
+    const getItem = vi.spyOn(sessionStorage, "getItem").mockImplementation(() => {
+      throw new Error("Storage blocked");
+    });
+    try {
+      const oauth = await import("@/utils/auth/oauth");
+      expect(new URL(oauth.googleLoginUrl("/blog"), location.origin).pathname).toBe(
+        "/oauth2/authorization/google",
+      );
+      expect(oauth.consumeOAuthAttempt()).toBe("/");
+    } finally {
+      setItem.mockRestore();
+      getItem.mockRestore();
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+  it("토큰 저장 없이 프로필을 완성하고 다음 로그인에서 온보딩을 건너뛸 수 있다.", async () => {
+    const session = createAuthSession({ fetch: mockOAuthFetch });
+    startMockOAuthSession();
+    await session.completeOAuthLogin();
     expect(session.needsOnboarding.value).toBe(true);
+    expect(sessionStorage.getItem("codeiary.oauth.mock.tokens")).toBeNull();
+    expect(sessionStorage.getItem("codeiary.session")).toBeNull();
     expect(await session.checkNickname("Codeiary")).toEqual({
       available: false,
     });
@@ -60,7 +92,9 @@ describe("OAuth 인증과 온보딩", () => {
       role: "USER",
     });
     await session.logout();
-    await session.exchangeOAuthCode("preview-returning", "state2");
+    expect(sessionStorage.getItem("codeiary.oauth.mock.session")).toBeNull();
+    startMockOAuthSession();
+    await session.completeOAuthLogin();
     expect(session.needsOnboarding.value).toBe(false);
     expect(session.user.value?.nickname).toBe("새로운기록자");
   });
