@@ -4,6 +4,17 @@ import { deferred, jsonResponse, storageFixture, userFixture } from "./fixtures/
 
 const unauthorized = () => jsonResponse({ code: "UNAUTHORIZED" }, 401);
 const noContent = () => new Response(null, { status: 204 });
+const presignedUpload = () => ({
+  uploadUrl: "https://uploads.example.com/photo.jpg?signature=example",
+  imageUrl: "https://img.example.com/photo.jpg",
+  headers: {
+    "content-type": "image/jpeg",
+    "cache-control": "public,max-age=31536000,immutable",
+    "x-amz-server-side-encryption": "AES256",
+    "if-none-match": "*",
+  },
+  expiresAt: new Date(Date.now() + 300_000).toISOString(),
+});
 
 describe("HttpOnly 쿠키 로그인 세션", () => {
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
@@ -266,47 +277,76 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     expect(requestsTo("/auth/reissue")).toHaveLength(0);
   });
 
-  it("사진 파일을 쿠키로 업로드하고 프로필 저장 전까지 기존 정보를 유지할 수 있다.", async () => {
+  it("쿠키로 업로드 주소를 받고 인증정보 없이 S3에 사진을 전송할 수 있다.", async () => {
     await login();
     const file = new File(["photo"], "profile.jpg", { type: "image/jpeg" });
-    const result = { profileImageUrl: "https://img.example.com/profile.jpg" };
-    fetchMock.mockResolvedValueOnce(jsonResponse(result));
+    const result = presignedUpload();
+    fetchMock.mockResolvedValueOnce(jsonResponse(result)).mockResolvedValueOnce(new Response(null));
 
-    expect(await session.uploadProfileImage(file)).toEqual(result);
+    expect(await session.uploadProfileImage(file)).toEqual({ profileImageUrl: result.imageUrl });
 
-    const request = requestsTo("/users/me/profile-image")[0]![1];
-    expect(request?.method).toBe("POST");
-    expect(request?.body).toBeInstanceOf(FormData);
-    expect((request?.body as FormData).get("profileImage")).toBe(file);
-    expect(new Headers(request?.headers).has("Content-Type")).toBe(false);
+    const metadata = requestsTo("/images/presigned-url")[0]![1];
+    expect(metadata?.method).toBe("POST");
+    expect(metadata?.credentials).toBe("include");
+    expect(JSON.parse(String(metadata?.body))).toEqual({ contentType: file.type, contentLength: file.size });
+    const upload = fetchMock.mock.calls.find(([url]) => url === result.uploadUrl)?.[1];
+    expect(upload).toMatchObject({ method: "PUT", body: file, credentials: "omit", redirect: "error" });
+    for (const [name, value] of Object.entries(result.headers))
+      expect(new Headers(upload?.headers).get(name)).toBe(value);
+    expect(new Headers(upload?.headers).has("Authorization")).toBe(false);
+    expect(new Headers(upload?.headers).has("Cookie")).toBe(false);
     expect(session.user.value).toEqual(userFixture());
     expect(requestsTo("/users/me/profile")).toHaveLength(0);
-    expectCookieRequests();
   });
 
-  it("잘못된 사진 업로드 응답을 거절하고 기존 프로필을 유지할 수 있다.", async () => {
+  it.each([
+    { reason: "HTTPS가 아닌 주소", patch: { uploadUrl: "http://example.com/photo.jpg" } },
+    { reason: "만료된 주소", patch: { expiresAt: new Date(0).toISOString() } },
+    { reason: "파일 형식과 다른 헤더", patch: { headers: { "Content-Type": "image/png" } } },
+    ...["Authorization", "Cookie", "Content-Length", "Host"].map((name) => ({
+      reason: `${name} 헤더`, patch: { headers: { "Content-Type": "image/jpeg", [name]: "forbidden" } },
+    })),
+  ])("$reason를 포함한 업로드 응답을 거절할 수 있다.", async ({ patch }) => {
     await login();
-    fetchMock.mockResolvedValueOnce(jsonResponse({ profileImageUrl: "http://example.com/photo.jpg" }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...presignedUpload(), ...patch }));
 
     await expect(session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" })))
       .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
 
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(session.user.value).toEqual(userFixture());
   });
 
-  it("로그아웃 후 도착한 사진 업로드 결과를 거절할 수 있다.", async () => {
+  it("S3 업로드 실패를 인증 재발급 없이 사용자에게 전달할 수 있다.", async () => {
+    await login();
+    fetchMock.mockResolvedValueOnce(jsonResponse(presignedUpload()))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+
+    await expect(session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" })))
+      .rejects.toMatchObject({ code: "IMAGE_UPLOAD_FAILED", message: expect.stringContaining("사진을 업로드하지 못했어요") });
+
+    expect(requestsTo("/auth/reissue")).toHaveLength(0);
+    expect(session.user.value).toEqual(userFixture());
+  });
+
+  it.each(["주소 발급", "파일 전송"])("%s 중 로그아웃하면 업로드 결과를 사용하지 않을 수 있다.", async (stage) => {
     await login();
     const pending = deferred<Response>();
+    const result = presignedUpload();
+    if (stage === "파일 전송") fetchMock.mockResolvedValueOnce(jsonResponse(result));
     fetchMock.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(noContent());
 
     const upload = session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" }));
     const rejected = expect(upload).rejects.toMatchObject({ code: "SESSION_CHANGED" });
-    await vi.waitFor(() => expect(requestsTo("/users/me/profile-image")).toHaveLength(1));
+    const requestUrl = stage === "주소 발급" ? "/api/images/presigned-url" : result.uploadUrl;
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === requestUrl)).toBe(true));
     await session.logout();
-    pending.resolve(jsonResponse({ profileImageUrl: "https://img.example.com/profile.jpg" }));
+    pending.resolve(stage === "주소 발급" ? jsonResponse(result) : new Response(null));
     await rejected;
 
     expect(session.user.value).toBeNull();
+    expect(fetchMock.mock.calls.filter(([url]) => url === result.uploadUrl))
+      .toHaveLength(stage === "주소 발급" ? 0 : 1);
   });
 
   it("로그아웃 후 도착한 프로필 저장 응답으로 세션이 복원되지 않게 할 수 있다.", async () => {

@@ -177,7 +177,8 @@ describe("OAuth 인증과 온보딩", () => {
     expect(await session.authorizedRequest("/users/me")).toEqual(profile);
   });
   it("온보딩 후 사진을 업로드하고 저장할 때 프로필에 반영할 수 있다.", async () => {
-    const session = createAuthSession({ fetch: mockOAuthFetch });
+    const fetchMock = vi.fn(mockOAuthFetch);
+    const session = createAuthSession({ fetch: fetchMock });
     const file = new File([new Uint8Array([255, 216, 255, 217])], "profile.jpg", { type: "image/jpeg" });
     startMockOAuthSession();
     await session.completeOAuthLogin();
@@ -186,7 +187,11 @@ describe("OAuth 인증과 온보딩", () => {
     await session.completeOnboarding("사진기록자");
     const uploaded = await session.uploadProfileImage(file);
 
-    expect(uploaded.profileImageUrl).toMatch(/^data:image\/jpeg;base64,/);
+    expect(uploaded.profileImageUrl).toMatch(/^https:\/\/images\.codeiary\.invalid\//);
+    const upload = fetchMock.mock.calls.find(([url]) => String(url).startsWith("https://uploads.codeiary.invalid/"))!;
+    expect(upload[1]).toMatchObject({ method: "PUT", credentials: "omit", body: file });
+    expect(new Headers(upload[1]?.headers).get("If-None-Match")).toBe("*");
+    expect((await mockOAuthFetch(...upload)).status).toBe(412);
     expect(session.user.value?.profileImageUrl).toBeNull();
     await session.updateProfile({
       nickname: "사진기록자",
@@ -194,7 +199,7 @@ describe("OAuth 인증과 온보딩", () => {
       githubUrl: null,
       contactEmail: null,
     });
-    expect(session.user.value?.profileImageUrl).toBe(uploaded.profileImageUrl);
+    expect(session.user.value?.profileImageUrl).toMatch(/^data:image\/jpeg;base64,/);
     expect(session.user.value?.role).toBe("USER");
   });
   it("큰 파일과 사진이 아닌 파일을 변환 전에 거절할 수 있다.", async () => {

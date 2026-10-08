@@ -32,6 +32,7 @@ export function createAuthSession(
   } = {},
 ) {
   const api = createAuthApi(options);
+  const uploadFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const user = shallowRef<UserProfile | null>(null);
   const notice = ref("");
   const signingOut = ref(false);
@@ -214,21 +215,71 @@ export function createAuthSession(
 
   async function uploadProfileImage(file: File): Promise<{ profileImageUrl: string }> {
     const currentRevision = revision;
-    const form = new FormData();
-    form.set("profileImage", file);
-    const result = await authorizedRequest<{ profileImageUrl: string }>("/users/me/profile-image", {
+    requireCurrentSession(currentRevision);
+    if (file.type !== "image/jpeg" || !file.size)
+      throw new AuthError(400, "INVALID_IMAGE", "사진을 읽을 수 없어요. 다른 이미지를 선택해 주세요.");
+    if (file.size > 1024 * 1024)
+      throw new AuthError(413, "PAYLOAD_TOO_LARGE", "사진 용량이 너무 커요. 다른 이미지를 선택해 주세요.");
+
+    const result = await authorizedRequest<{
+      uploadUrl: string;
+      imageUrl: string;
+      headers: Record<string, string>;
+      expiresAt: string;
+    }>("/images/presigned-url", {
       method: "POST",
-      body: form,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contentType: file.type, contentLength: file.size }),
     });
     requireCurrentSession(currentRevision);
-    const profileImageUrl = result?.profileImageUrl;
-    const mockImage = import.meta.env.DEV && import.meta.env.VITE_AUTH_MOCK !== "false"
-      && typeof profileImageUrl === "string"
-      && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(profileImageUrl);
-    if (typeof profileImageUrl !== "string"
-        || (!/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/.test(profileImageUrl) && !mockImage))
-      throw new AuthError(0, "INVALID_RESPONSE", "사진 업로드 결과를 확인하지 못했어요. 다시 시도해 주세요.");
-    return { profileImageUrl };
+
+    let uploadUrl: URL;
+    let imageUrl: URL;
+    let headers: Headers;
+    try {
+      if (typeof result?.uploadUrl !== "string" || typeof result.imageUrl !== "string"
+          || !result.headers || typeof result.headers !== "object" || Array.isArray(result.headers)
+          || Object.values(result.headers).some((value) => typeof value !== "string")
+          || typeof result.expiresAt !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(result.expiresAt)
+          || !Number.isFinite(Date.parse(result.expiresAt)) || Date.parse(result.expiresAt) <= Date.now())
+        throw new Error("Invalid upload response");
+      uploadUrl = new URL(result.uploadUrl);
+      imageUrl = new URL(result.imageUrl);
+      headers = new Headers(result.headers);
+      if ([uploadUrl, imageUrl].some((url) => url.protocol !== "https:" || url.username || url.password || url.hash)
+          || ["Authorization", "Cookie", "Content-Length", "Host"].some((name) => headers.has(name))
+          || headers.get("Content-Type") !== file.type)
+        throw new Error("Invalid upload response");
+    } catch {
+      throw new AuthError(0, "INVALID_RESPONSE", "사진 업로드 주소를 확인하지 못했어요. 다시 시도해 주세요.");
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    try {
+      requireCurrentSession(currentRevision);
+      const response = await uploadFetch(uploadUrl.href, {
+        method: "PUT",
+        headers,
+        body: file,
+        credentials: "omit",
+        redirect: "error",
+        referrerPolicy: "no-referrer",
+        signal: controller.signal,
+      });
+      requireCurrentSession(currentRevision);
+      if (!response.ok)
+        throw new AuthError(response.status, "IMAGE_UPLOAD_FAILED", "사진을 업로드하지 못했어요. 다시 시도해 주세요.");
+      return { profileImageUrl: imageUrl.href };
+    } catch (error) {
+      requireCurrentSession(currentRevision);
+      if (error instanceof AuthError) throw error;
+      throw new AuthError(0, "IMAGE_UPLOAD_FAILED", controller.signal.aborted
+        ? "사진 업로드 시간이 초과됐어요. 다시 시도해 주세요."
+        : "사진을 업로드하지 못했어요. 연결 상태를 확인하고 다시 시도해 주세요.");
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   function logout(): Promise<void> {

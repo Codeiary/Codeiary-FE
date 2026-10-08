@@ -3,6 +3,10 @@ import { nicknameError } from "@/utils/auth/validation";
 
 const PROFILE_KEY = "codeiary.oauth.mock.profile";
 const SESSION_KEY = "codeiary.oauth.mock.session";
+const uploadOrigin = "https://uploads.codeiary.invalid";
+const imageOrigin = "https://images.codeiary.invalid";
+const uploads = new Map<string, { contentType: string; contentLength: number; imageUrl: string; expiresAt: number }>();
+const uploadedImages = new Map<string, string>();
 const usedNicknames = new Set([
   "codeiary",
   "관리자",
@@ -50,6 +54,27 @@ export const mockOAuthFetch: typeof fetch = async (input, init) => {
   try {
     const signedIn = sessionStorage.getItem(SESSION_KEY) === "active";
     const method = init?.method ?? "GET";
+    if (url.origin === uploadOrigin) {
+      const upload = uploads.get(url.pathname);
+      const headers = new Headers(init?.headers);
+      if (method !== "PUT" || init?.credentials !== "omit" || headers.has("Authorization") || headers.has("Cookie")
+          || !upload || upload.expiresAt <= Date.now())
+        return json({ code: "UPLOAD_FORBIDDEN" }, 403);
+      if (uploadedImages.has(upload.imageUrl))
+        return json({ code: "PRECONDITION_FAILED" }, 412);
+      const file = init?.body;
+      if (!(file instanceof File) || file.type !== upload.contentType || file.size !== upload.contentLength
+          || headers.get("Content-Type") !== upload.contentType)
+        return json({ code: "INVALID_IMAGE" }, 400);
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      uploadedImages.set(upload.imageUrl, dataUrl);
+      return new Response(null, { status: 200 });
+    }
     if (init?.credentials !== "include")
       return json({ code: "UNAUTHORIZED" }, 401);
     if (url.pathname.endsWith("/auth/logout") && method === "POST") {
@@ -90,18 +115,33 @@ export const mockOAuthFetch: typeof fetch = async (input, init) => {
       localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
       return json(updated);
     }
-    if (url.pathname.endsWith("/users/me/profile-image") && method === "POST") {
+    if (url.pathname.endsWith("/images/presigned-url") && method === "POST") {
       if (profile().role === "PENDING") return json({ code: "FORBIDDEN" }, 403);
-      const photo = init?.body instanceof FormData ? init.body.get("profileImage") : null;
-      if (!(photo instanceof File) || photo.type !== "image/jpeg" || !photo.size || photo.size > 1024 * 1024)
-        return json({ code: "INVALID_PROFILE_IMAGE" }, 400);
-      const profileImageUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = reject;
-        reader.readAsDataURL(photo);
+      let input;
+      try {
+        input = JSON.parse(String(init?.body));
+      } catch {
+        return json({ code: "INVALID_PARAMETER" }, 400);
+      }
+      if (!input || !["image/jpeg", "image/png"].includes(input.contentType)
+          || !Number.isSafeInteger(input.contentLength) || input.contentLength <= 0)
+        return json({ code: "INVALID_IMAGE" }, 400);
+      if (input.contentLength > 10 * 1024 * 1024) return json({ code: "PAYLOAD_TOO_LARGE" }, 413);
+      const path = `/${crypto.randomUUID()}`;
+      const imageUrl = `${imageOrigin}${path}`;
+      const expiresAt = Date.now() + 300_000;
+      uploads.set(path, { contentType: input.contentType, contentLength: input.contentLength, imageUrl, expiresAt });
+      return json({
+        uploadUrl: `${uploadOrigin}${path}`,
+        imageUrl,
+        headers: {
+          "content-type": input.contentType,
+          "cache-control": "public,max-age=31536000,immutable",
+          "x-amz-server-side-encryption": "AES256",
+          "if-none-match": "*",
+        },
+        expiresAt: new Date(expiresAt).toISOString(),
       });
-      return json({ profileImageUrl });
     }
     if (url.pathname.endsWith("/users/me/profile") && method === "PUT") {
       const current = profile();
@@ -133,7 +173,7 @@ export const mockOAuthFetch: typeof fetch = async (input, init) => {
       const updated: UserProfile = {
         ...current,
         nickname: input.nickname.trim(),
-        profileImageUrl,
+        profileImageUrl: uploadedImages.get(profileImageUrl) ?? profileImageUrl,
         githubUrl,
         contactEmail,
       };
