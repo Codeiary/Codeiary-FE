@@ -41,9 +41,9 @@ export function createAuthApi(
         const messages: Record<string, string> = {
           NICKNAME_TAKEN: "이미 사용 중인 닉네임이에요.",
           INVALID_NICKNAME: "닉네임 형식을 확인해 주세요.",
-          INVALID_PROFILE_IMAGE: "사진을 읽을 수 없어요. 다른 이미지를 선택해 주세요.",
-          PROFILE_IMAGE_UPLOAD_UNAVAILABLE: "사진 업로드를 준비 중이에요. 잠시 후 다시 시도해 주세요.",
-          PROFILE_IMAGE_UPLOAD_FAILED: "사진을 저장하지 못했어요. 다시 시도해 주세요.",
+          INVALID_IMAGE: "사진을 읽을 수 없어요. 다른 이미지를 선택해 주세요.",
+          IMAGE_UPLOAD_UNAVAILABLE: "사진 업로드를 준비 중이에요. 잠시 후 다시 시도해 주세요.",
+          IMAGE_UPLOAD_FAILED: "사진을 저장하지 못했어요. 다시 시도해 주세요.",
         };
         const message = messages[code] ?? (
           response.status === 401 ? expiredMessage
