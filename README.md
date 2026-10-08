@@ -87,7 +87,11 @@ OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은
 
 - `GET /api/users/nickname-availability?nickname=...` → `{ available: boolean }`.
 - `POST /api/users/me/onboarding` → `multipart/form-data`의 `nickname`만 받고 온보딩이 완료된 사용자 프로필을 반환합니다. 중복은 `409 / NICKNAME_TAKEN`으로 응답합니다.
-- `POST /api/users/me/profile-image` → `multipart/form-data`의 `profileImage`로 사진을 보내고 `{ profileImageUrl: string }`을 받습니다. 선택한 원본은 브라우저에서 256×256 JPEG로 변환합니다. 목 인증에서는 브라우저에만 저장하고 실제 API에서는 S3에 업로드합니다.
+- 선택한 원본은 브라우저에서 256×256 JPEG로 변환하며, 프로필 업로드는 1MiB 이하로 제한합니다.
+- `POST /api/images/presigned-url`에 `{ contentType, contentLength }`를 인증 쿠키와 함께 보내고 `{ uploadUrl, imageUrl, headers, expiresAt }`를 받습니다. 서버의 공통 이미지 계약은 JPG·PNG 10MiB 이하입니다.
+- 파일은 발급받은 HTTPS `uploadUrl`에 `PUT`으로 직접 전송합니다. 서버가 지정한 `Content-Type` 등 업로드 헤더만 사용하고 쿠키·Authorization 헤더를 보내지 않습니다. 파일 전송 제한 시간은 60초이며, 실패해도 토큰 재발급이나 자동 재전송을 하지 않습니다.
+- S3 전송 성공 후 CloudFront `imageUrl`을 기존 프로필 수정 요청에 포함합니다. 주소 발급이나 파일 전송만으로 사용자 프로필을 바꾸지 않습니다. S3 CORS에는 프론트 오리진의 `PUT`과 업로드 헤더가 허용되어야 합니다.
+- 개발 목 인증은 `.invalid` 주소 발급과 파일 `PUT`의 두 단계를 재현합니다. 외부 S3에 요청하지 않고 프로필 저장 시 브라우저 안의 이미지 데이터로 바꿔 표시합니다.
 - `PUT /api/users/me/profile` → JSON의 `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`을 저장하고 갱신된 본인 프로필을 반환합니다. 비워 둔 선택 항목은 `null`로 보내 삭제합니다. `PENDING` 계정은 사용할 수 없습니다.
 
 프로필은 `id`, `email`, `name`, `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`, `onboardingCompleted`, `role`을 포함합니다.
