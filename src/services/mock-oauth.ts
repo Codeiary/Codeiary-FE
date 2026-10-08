@@ -24,7 +24,7 @@ function profile(): UserProfile {
         name: "새로운 이웃",
         nickname: null,
         profileImageUrl: null,
-        role: "USER",
+        role: "PENDING",
         onboardingCompleted: false,
       };
 }
@@ -34,7 +34,8 @@ export function startMockOAuthSession() {
   sessionStorage.setItem(SESSION_KEY, "active");
 }
 function available(nickname: string) {
-  return !usedNicknames.has(nickname.trim().toLocaleLowerCase());
+  const normalized = nickname.trim().toLowerCase();
+  return normalized === profile().nickname?.toLowerCase() || !usedNicknames.has(normalized);
 }
 // Dev-only session marker simulates cookie authentication without storing token values.
 export const mockOAuthFetch: typeof fetch = async (input, init) => {
@@ -73,27 +74,68 @@ export const mockOAuthFetch: typeof fetch = async (input, init) => {
     }
     if (
       url.pathname.endsWith("/users/me/onboarding") &&
+      method === "POST" &&
       init?.body instanceof FormData
     ) {
       const nickname = String(init.body.get("nickname") ?? "").trim();
       if (nicknameError(nickname))
         return json({ code: "INVALID_NICKNAME" }, 400);
       if (!available(nickname)) return json({ code: "NICKNAME_TAKEN" }, 409);
-      const photo = init.body.get("profileImage");
-      let profileImageUrl: string | null = null;
-      if (photo instanceof Blob && photo.size) {
-        profileImageUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = reject;
-          reader.readAsDataURL(photo);
-        });
-      }
       const updated = {
         ...profile(),
         nickname,
-        profileImageUrl,
         onboardingCompleted: true,
+        role: profile().role === "PENDING" ? "USER" : profile().role,
+      };
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
+      return json(updated);
+    }
+    if (url.pathname.endsWith("/users/me/profile-image") && method === "POST") {
+      if (profile().role === "PENDING") return json({ code: "FORBIDDEN" }, 403);
+      const photo = init?.body instanceof FormData ? init.body.get("profileImage") : null;
+      if (!(photo instanceof File) || photo.type !== "image/jpeg" || !photo.size || photo.size > 1024 * 1024)
+        return json({ code: "INVALID_PROFILE_IMAGE" }, 400);
+      const profileImageUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(photo);
+      });
+      return json({ profileImageUrl });
+    }
+    if (url.pathname.endsWith("/users/me/profile") && method === "PUT") {
+      const current = profile();
+      if (current.role === "PENDING") return json({ code: "FORBIDDEN" }, 403);
+      let input;
+      try {
+        input = JSON.parse(String(init?.body));
+      } catch {
+        return json({ code: "INVALID_PARAMETER" }, 400);
+      }
+      if (!input || typeof input.nickname !== "string" || nicknameError(input.nickname))
+        return json({ code: "INVALID_NICKNAME" }, 400);
+      if (!available(input.nickname)) return json({ code: "NICKNAME_TAKEN" }, 409);
+      const optional = (value: unknown, max: number) =>
+        value == null || (typeof value === "string" && value.length <= max);
+      const mockImage = typeof input.profileImageUrl === "string"
+        && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(input.profileImageUrl);
+      const imageUrlLimit = mockImage ? 1_400_000 : 2048;
+      if (!optional(input.profileImageUrl, imageUrlLimit) || !optional(input.githubUrl, 255)
+          || !optional(input.contactEmail, 254))
+        return json({ code: "INVALID_PARAMETER" }, 400);
+      const profileImageUrl = input.profileImageUrl?.trim() || null;
+      const githubUrl = input.githubUrl?.trim() || null;
+      const contactEmail = input.contactEmail?.trim() || null;
+      if ((profileImageUrl && !mockImage && !/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/.test(profileImageUrl))
+          || (githubUrl && !/^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/?$/.test(githubUrl))
+          || (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)))
+        return json({ code: "INVALID_PARAMETER" }, 400);
+      const updated: UserProfile = {
+        ...current,
+        nickname: input.nickname.trim(),
+        profileImageUrl,
+        githubUrl,
+        contactEmail,
       };
       localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
       return json(updated);

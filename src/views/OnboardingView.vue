@@ -5,17 +5,11 @@ import AuthLayout from "@/layouts/AuthLayout.vue";
 import Icon from "@/components/Icon.vue";
 import { auth, AuthError } from "@/store/auth";
 import { nicknameError } from "@/utils/auth/validation";
-import { prepareAvatar } from "@/utils/profile/avatar-upload";
 import { loginDestination } from "@/router/auth-guard";
 const router = useRouter();
 const route = useRoute();
 const nickname = ref(auth.user.value?.nickname ?? "");
 const nicknameInput = ref<HTMLInputElement>();
-const fileInput = ref<HTMLInputElement>();
-const photo = ref<File | null>(null);
-const preview = ref("");
-const photoError = ref("");
-const processingPhoto = ref(false);
 const busy = ref(false);
 const error = ref("");
 const touched = ref(false);
@@ -26,7 +20,6 @@ const checkError = ref("");
 const checkedNickname = ref("");
 let timer: ReturnType<typeof setTimeout> | undefined;
 let version = 0;
-let photoVersion = 0;
 const formatError = computed(() =>
   touched.value ? nicknameError(nickname.value) : "",
 );
@@ -81,38 +74,8 @@ watch(nickname, () => {
   checkedNickname.value = "";
   if (!nicknameError(nickname.value)) timer = setTimeout(check, 350);
 });
-function clearPhoto() {
-  photoVersion++;
-  if (preview.value) URL.revokeObjectURL(preview.value);
-  preview.value = "";
-  photo.value = null;
-  photoError.value = "";
-  processingPhoto.value = false;
-  if (fileInput.value) fileInput.value.value = "";
-}
-async function selectPhoto(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  const current = ++photoVersion;
-  processingPhoto.value = true;
-  photoError.value = "";
-  try {
-    const prepared = await prepareAvatar(file);
-    if (current !== photoVersion) return;
-    if (preview.value) URL.revokeObjectURL(preview.value);
-    photo.value = prepared;
-    preview.value = URL.createObjectURL(prepared);
-  } catch (reason) {
-    if (current === photoVersion)
-      photoError.value =
-        reason instanceof Error ? reason.message : "사진을 처리하지 못했어요.";
-  } finally {
-    if (current === photoVersion) processingPhoto.value = false;
-    if (fileInput.value) fileInput.value.value = "";
-  }
-}
 async function submit() {
-  if (busy.value || processingPhoto.value) return;
+  if (busy.value) return;
   touched.value = true;
   error.value = "";
   if (nicknameError(nickname.value)) {
@@ -132,7 +95,7 @@ async function submit() {
       nicknameInput.value?.focus();
       return;
     }
-    await auth.completeOnboarding(nickname.value.trim(), photo.value);
+    await auth.completeOnboarding(nickname.value.trim());
     await router.replace(loginDestination(route.query.redirect));
   } catch (reason) {
     if (reason instanceof AuthError && reason.code === "NICKNAME_TAKEN") {
@@ -142,7 +105,7 @@ async function submit() {
       error.value =
         reason instanceof Error
           ? reason.message
-          : "프로필을 저장하지 못했어요. 다시 시도해 주세요.";
+          : "닉네임을 저장하지 못했어요. 다시 시도해 주세요.";
   } finally {
     busy.value = false;
   }
@@ -167,74 +130,19 @@ async function changeAccount() {
 onBeforeUnmount(() => {
   version++;
   clearTimeout(timer);
-  clearPhoto();
 });
 </script>
 <template>
   <AuthLayout onboarding>
     <span class="auth-eyebrow">NICE TO MEET YOU</span>
     <h1>어떤 이름으로<br />만나면 좋을까요<span>?</span></h1>
-    <p class="auth-description">나를 표현하는 프로필을 완성해 주세요.</p>
+    <p class="auth-description">동네에서 사용할 닉네임을 정해 주세요.</p>
     <form
       class="onboarding-form"
       novalidate
       :aria-busy="busy"
       @submit.prevent="submit"
     >
-      <div class="onboarding-photo-row">
-        <button
-          type="button"
-          class="onboarding-avatar"
-          :disabled="busy || processingPhoto"
-          aria-label="프로필 사진 선택"
-          @click="fileInput?.click()"
-        >
-          <img v-if="preview" :src="preview" alt="선택한 프로필 사진" />
-          <span v-else class="onboarding-avatar-letter">{{
-            nickname.trim().slice(0, 1) || "d"
-          }}</span>
-          <span class="onboarding-camera"><Icon name="plus" :size="14" /></span>
-        </button>
-        <div>
-          <span class="onboarding-photo-label"
-            >프로필 사진 <small>선택</small></span
-          >
-          <div class="onboarding-photo-actions">
-            <button
-              type="button"
-              :disabled="busy || processingPhoto"
-              @click="fileInput?.click()"
-            >
-              {{
-                processingPhoto
-                  ? "사진 준비 중…"
-                  : preview
-                    ? "사진 변경"
-                    : "사진 추가"
-              }}</button
-            ><button
-              v-if="preview"
-              type="button"
-              :disabled="busy"
-              @click="clearPhoto"
-            >
-              삭제
-            </button>
-          </div>
-        </div>
-        <input
-          ref="fileInput"
-          type="file"
-          class="visually-hidden"
-          accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
-          aria-label="프로필 사진 파일"
-          :disabled="busy || processingPhoto"
-          @change="selectPhoto"
-        />
-      </div>
-      <p v-if="photoError" class="auth-field-message is-invalid" role="alert">
-        {{ photoError }}
-      </p>
       <label for="onboarding-nickname" class="auth-field-label">닉네임</label>
       <div class="onboarding-input" :class="{ 'is-invalid': invalid }">
         <input
@@ -274,11 +182,9 @@ onBeforeUnmount(() => {
       <p v-if="error" class="auth-message" role="alert">{{ error }}</p>
       <button
         class="auth-primary"
-        :disabled="
-          busy || processingPhoto || !nickname.trim() || status === 'taken'
-        "
+        :disabled="busy || !nickname.trim() || status === 'taken'"
       >
-        {{ busy ? "프로필 저장 중…" : "시작하기"
+        {{ busy ? "닉네임 저장 중…" : "시작하기"
         }}<Icon v-if="!busy" name="arrow-right" :size="18" />
       </button>
     </form>

@@ -9,8 +9,17 @@ export interface UserProfile {
   name: string;
   nickname?: string | null;
   profileImageUrl?: string | null;
+  githubUrl?: string | null;
+  contactEmail?: string | null;
   onboardingCompleted?: boolean;
-  role: "ADMIN" | "USER";
+  role: "ADMIN" | "USER" | "PENDING";
+}
+
+export interface ProfileUpdateInput {
+  nickname: string;
+  profileImageUrl: string | null;
+  githubUrl: string | null;
+  contactEmail: string | null;
 }
 
 const expiredMessage = "로그인이 만료되었어요. 다시 로그인해 주세요.";
@@ -53,7 +62,7 @@ export function createAuthSession(
     if (
       !profile || !Number.isSafeInteger(profile.id) || profile.id <= 0 ||
       typeof profile.email !== "string" || typeof profile.name !== "string" ||
-      !["ADMIN", "USER"].includes(profile.role)
+      !["ADMIN", "USER", "PENDING"].includes(profile.role)
     ) {
       throw new AuthError(0, "INVALID_RESPONSE", "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요.");
     }
@@ -172,11 +181,10 @@ export function createAuthSession(
     );
   }
 
-  async function completeOnboarding(nickname: string, photo: File | null) {
+  async function completeOnboarding(nickname: string) {
     const currentRevision = revision;
     const form = new FormData();
     form.set("nickname", nickname.trim());
-    if (photo) form.set("profileImage", photo);
     const profile = await authorizedRequest<UserProfile>("/users/me/onboarding", { method: "POST", body: form });
     requireCurrentSession(currentRevision);
     if (!profile.nickname || profile.onboardingCompleted !== true)
@@ -191,6 +199,36 @@ export function createAuthSession(
     if (profile.role !== "ADMIN")
       throw new AuthError(403, "FORBIDDEN", "관리자만 접근할 수 있어요.");
     acceptProfile(profile);
+  }
+
+  async function updateProfile(input: ProfileUpdateInput) {
+    const currentRevision = revision;
+    const profile = await authorizedRequest<UserProfile>("/users/me/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    requireCurrentSession(currentRevision);
+    acceptProfile(profile);
+  }
+
+  async function uploadProfileImage(file: File): Promise<{ profileImageUrl: string }> {
+    const currentRevision = revision;
+    const form = new FormData();
+    form.set("profileImage", file);
+    const result = await authorizedRequest<{ profileImageUrl: string }>("/users/me/profile-image", {
+      method: "POST",
+      body: form,
+    });
+    requireCurrentSession(currentRevision);
+    const profileImageUrl = result?.profileImageUrl;
+    const mockImage = import.meta.env.DEV && import.meta.env.VITE_AUTH_MOCK !== "false"
+      && typeof profileImageUrl === "string"
+      && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(profileImageUrl);
+    if (typeof profileImageUrl !== "string"
+        || (!/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/.test(profileImageUrl) && !mockImage))
+      throw new AuthError(0, "INVALID_RESPONSE", "사진 업로드 결과를 확인하지 못했어요. 다시 시도해 주세요.");
+    return { profileImageUrl };
   }
 
   function logout(): Promise<void> {
@@ -236,6 +274,8 @@ export function createAuthSession(
     completeOAuthLogin,
     checkNickname,
     completeOnboarding,
+    updateProfile,
+    uploadProfileImage,
     needsOnboarding: computed(() => user.value?.onboardingCompleted === false),
     logout,
     verifyAdmin,
