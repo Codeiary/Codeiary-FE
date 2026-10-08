@@ -68,6 +68,16 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     expectCookieRequests();
   });
 
+  it("온보딩 전 계정의 세션을 복원하고 온보딩 필요 여부를 확인할 수 있다.", async () => {
+    const profile = { ...userFixture("PENDING"), onboardingCompleted: false };
+    fetchMock.mockResolvedValueOnce(jsonResponse(profile));
+
+    expect(await session.restore()).toBe(true);
+    expect(session.user.value).toEqual(profile);
+    expect(session.needsOnboarding.value).toBe(true);
+    expectCookieRequests();
+  });
+
   it("복원 중 401이면 본문 없이 재발급하고 사용자를 다시 조회할 수 있다.", async () => {
     const save = vi.spyOn(storage, "setItem");
     fetchMock
@@ -239,6 +249,88 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     await expect(session.verifyAdmin()).rejects.toMatchObject({ status: 403 });
     expect(requestsTo("/auth/reissue")).toHaveLength(0);
     expect(session.user.value).toEqual(userFixture());
+  });
+
+  it("프로필 저장이 서버에서 실패하면 기존 사용자 정보를 유지할 수 있다.", async () => {
+    await login();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ code: "SERVER_ERROR" }, 500));
+
+    await expect(session.updateProfile({
+      nickname: "변경할닉네임",
+      profileImageUrl: null,
+      githubUrl: null,
+      contactEmail: "public@example.com",
+    })).rejects.toMatchObject({ status: 500 });
+
+    expect(session.user.value).toEqual(userFixture());
+    expect(requestsTo("/auth/reissue")).toHaveLength(0);
+  });
+
+  it("사진 파일을 쿠키로 업로드하고 프로필 저장 전까지 기존 정보를 유지할 수 있다.", async () => {
+    await login();
+    const file = new File(["photo"], "profile.jpg", { type: "image/jpeg" });
+    const result = { profileImageUrl: "https://img.example.com/profile.jpg" };
+    fetchMock.mockResolvedValueOnce(jsonResponse(result));
+
+    expect(await session.uploadProfileImage(file)).toEqual(result);
+
+    const request = requestsTo("/users/me/profile-image")[0]![1];
+    expect(request?.method).toBe("POST");
+    expect(request?.body).toBeInstanceOf(FormData);
+    expect((request?.body as FormData).get("profileImage")).toBe(file);
+    expect(new Headers(request?.headers).has("Content-Type")).toBe(false);
+    expect(session.user.value).toEqual(userFixture());
+    expect(requestsTo("/users/me/profile")).toHaveLength(0);
+    expectCookieRequests();
+  });
+
+  it("잘못된 사진 업로드 응답을 거절하고 기존 프로필을 유지할 수 있다.", async () => {
+    await login();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ profileImageUrl: "http://example.com/photo.jpg" }));
+
+    await expect(session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" })))
+      .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+
+    expect(session.user.value).toEqual(userFixture());
+  });
+
+  it("로그아웃 후 도착한 사진 업로드 결과를 거절할 수 있다.", async () => {
+    await login();
+    const pending = deferred<Response>();
+    fetchMock.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(noContent());
+
+    const upload = session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" }));
+    const rejected = expect(upload).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+    await vi.waitFor(() => expect(requestsTo("/users/me/profile-image")).toHaveLength(1));
+    await session.logout();
+    pending.resolve(jsonResponse({ profileImageUrl: "https://img.example.com/profile.jpg" }));
+    await rejected;
+
+    expect(session.user.value).toBeNull();
+  });
+
+  it("로그아웃 후 도착한 프로필 저장 응답으로 세션이 복원되지 않게 할 수 있다.", async () => {
+    await login();
+    const pending = deferred<Response>();
+    const input = {
+      nickname: "변경할닉네임",
+      profileImageUrl: null,
+      githubUrl: null,
+      contactEmail: "public@example.com",
+    };
+    fetchMock
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(noContent());
+
+    const update = session.updateProfile(input);
+    const rejected = expect(update).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+    await vi.waitFor(() => expect(requestsTo("/users/me/profile")).toHaveLength(1));
+    await session.logout();
+    pending.resolve(jsonResponse({ ...userFixture(), ...input }));
+    await rejected;
+
+    expect(session.user.value).toBeNull();
+    expect(await session.restore()).toBe(false);
   });
 
   it("요청의 Bearer 헤더를 제거하고 쿠키로 인증할 수 있다.", async () => {

@@ -8,6 +8,7 @@ import {
 import { createAuthSession } from "@/store/auth";
 import { mockOAuthFetch, startMockOAuthSession } from "@/services/mock-oauth";
 import { prepareAvatar } from "@/utils/profile/avatar-upload";
+import { userFixture } from "./fixtures/auth";
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
@@ -70,26 +71,51 @@ describe("OAuth 인증과 온보딩", () => {
       vi.resetModules();
     }
   });
-  it("토큰 저장 없이 프로필을 완성하고 다음 로그인에서 온보딩을 건너뛸 수 있다.", async () => {
-    const session = createAuthSession({ fetch: mockOAuthFetch });
+  it("토큰 저장 없이 온보딩과 프로필 설정을 완료하고 다음 로그인에서 복원할 수 있다.", async () => {
+    const fetchMock = vi.fn(mockOAuthFetch);
+    const session = createAuthSession({ fetch: fetchMock });
     startMockOAuthSession();
     await session.completeOAuthLogin();
     expect(session.needsOnboarding.value).toBe(true);
+    expect(session.user.value?.role).toBe("PENDING");
     expect(sessionStorage.getItem("codeiary.oauth.mock.tokens")).toBeNull();
     expect(sessionStorage.getItem("codeiary.session")).toBeNull();
+    const profileInput = {
+      nickname: "새로운기록자",
+      profileImageUrl: "https://example.com/profile.png",
+      githubUrl: "https://github.com/code-writer",
+      contactEmail: "public@example.com",
+    };
+    await expect(session.updateProfile(profileInput)).rejects.toMatchObject({
+      status: 403,
+      code: "FORBIDDEN",
+    });
+    expect(session.user.value?.role).toBe("PENDING");
     expect(await session.checkNickname("Codeiary")).toEqual({
       available: false,
     });
     await expect(
-      session.completeOnboarding("Codeiary", null),
+      session.completeOnboarding("Codeiary"),
     ).rejects.toMatchObject({ code: "NICKNAME_TAKEN" });
     expect(session.needsOnboarding.value).toBe(true);
-    await session.completeOnboarding("새로운기록자", null);
+    await session.completeOnboarding("새로운기록자");
+    const requests = fetchMock.mock.calls
+      .filter(([url]) => String(url).endsWith("/users/me/onboarding"));
+    const onboarding = requests[requests.length - 1]?.[1]?.body;
+    expect(onboarding).toBeInstanceOf(FormData);
+    expect(Array.from((onboarding as FormData).keys())).toEqual(["nickname"]);
     expect(session.user.value).toMatchObject({
       nickname: "새로운기록자",
       profileImageUrl: null,
       onboardingCompleted: true,
       role: "USER",
+    });
+    await session.updateProfile(profileInput);
+    expect(await session.authorizedRequest("/users/me")).toMatchObject({
+      ...profileInput,
+      email: "preview@example.com",
+      role: "USER",
+      onboardingCompleted: true,
     });
     await session.logout();
     expect(sessionStorage.getItem("codeiary.oauth.mock.session")).toBeNull();
@@ -97,6 +123,79 @@ describe("OAuth 인증과 온보딩", () => {
     await session.completeOAuthLogin();
     expect(session.needsOnboarding.value).toBe(false);
     expect(session.user.value?.nickname).toBe("새로운기록자");
+  });
+  it("선택 프로필 정보를 null로 삭제하고 기존 권한을 유지할 수 있다.", async () => {
+    const profile = {
+      ...userFixture("ADMIN"),
+      nickname: "프로필주인",
+      profileImageUrl: "https://example.com/profile.png",
+      githubUrl: "https://github.com/code-writer",
+      contactEmail: "public@example.com",
+      onboardingCompleted: true,
+    };
+    localStorage.setItem("codeiary.oauth.mock.profile", JSON.stringify(profile));
+    startMockOAuthSession();
+    const session = createAuthSession({ fetch: mockOAuthFetch });
+    await session.completeOAuthLogin();
+
+    await session.updateProfile({
+      nickname: profile.nickname,
+      profileImageUrl: null,
+      githubUrl: null,
+      contactEmail: null,
+    });
+
+    expect(await session.authorizedRequest("/users/me")).toEqual({
+      ...profile,
+      profileImageUrl: null,
+      githubUrl: null,
+      contactEmail: null,
+    });
+  });
+  it("중복 닉네임 수정은 409로 거절하고 기존 프로필을 유지할 수 있다.", async () => {
+    const profile = {
+      ...userFixture("USER"),
+      nickname: "프로필주인",
+      profileImageUrl: null,
+      githubUrl: null,
+      contactEmail: "public@example.com",
+      onboardingCompleted: true,
+    };
+    localStorage.setItem("codeiary.oauth.mock.profile", JSON.stringify(profile));
+    startMockOAuthSession();
+    const session = createAuthSession({ fetch: mockOAuthFetch });
+    await session.completeOAuthLogin();
+
+    await expect(session.updateProfile({
+      nickname: "CODEIARY",
+      profileImageUrl: null,
+      githubUrl: null,
+      contactEmail: null,
+    })).rejects.toMatchObject({ status: 409, code: "NICKNAME_TAKEN" });
+
+    expect(session.user.value).toEqual(profile);
+    expect(await session.authorizedRequest("/users/me")).toEqual(profile);
+  });
+  it("온보딩 후 사진을 업로드하고 저장할 때 프로필에 반영할 수 있다.", async () => {
+    const session = createAuthSession({ fetch: mockOAuthFetch });
+    const file = new File([new Uint8Array([255, 216, 255, 217])], "profile.jpg", { type: "image/jpeg" });
+    startMockOAuthSession();
+    await session.completeOAuthLogin();
+
+    await expect(session.uploadProfileImage(file)).rejects.toMatchObject({ status: 403 });
+    await session.completeOnboarding("사진기록자");
+    const uploaded = await session.uploadProfileImage(file);
+
+    expect(uploaded.profileImageUrl).toMatch(/^data:image\/jpeg;base64,/);
+    expect(session.user.value?.profileImageUrl).toBeNull();
+    await session.updateProfile({
+      nickname: "사진기록자",
+      profileImageUrl: uploaded.profileImageUrl,
+      githubUrl: null,
+      contactEmail: null,
+    });
+    expect(session.user.value?.profileImageUrl).toBe(uploaded.profileImageUrl);
+    expect(session.user.value?.role).toBe("USER");
   });
   it("큰 파일과 사진이 아닌 파일을 변환 전에 거절할 수 있다.", async () => {
     await expect(

@@ -68,7 +68,8 @@ describe("온보딩 화면", () => {
     await vi.advanceTimersByTimeAsync(350);
     await wrapper.get("form").trigger("submit");
     await flushPromises();
-    expect(auth.completeOnboarding).toHaveBeenCalledWith("커밋산책", null);
+    expect(auth.completeOnboarding).toHaveBeenCalledWith("커밋산책");
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
     expect(router.currentRoute.value.path).toBe("/blog/writer/post");
   });
   it("저장 시 닉네임이 중복되어도 입력을 유지하고 다시 선택할 수 있다.", async () => {

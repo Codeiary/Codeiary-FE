@@ -48,8 +48,8 @@ API 요청은 운영 환경에서 같은 오리진의 `/api`를 사용합니다.
 
 - `/login`: Google 로그인만 표시하며 기존 이메일·비밀번호 로그인은 제거했습니다.
 - `/auth/callback`: 백엔드가 로그인 쿠키를 설정한 뒤 복귀하는 화면입니다. `GET /api/users/me`로 현재 사용자를 확인하고 온보딩 또는 원래 화면으로 이동합니다.
-- `/onboarding`: 선택 사진과 필수 닉네임을 설정합니다. 닉네임은 한글·영문·숫자·밑줄 2~20자이며, 입력 중 중복 확인과 저장 시 중복 거절을 처리합니다.
-- 프로필 사진은 10MB 이하이며 브라우저에서 256px 정사각형 JPEG로 변환합니다. HEIC/HEIF는 브라우저가 읽을 수 있는 경우에만 처리하고, 지원하지 않으면 JPG/PNG를 안내합니다.
+- `/onboarding`: 필수 닉네임만 설정합니다. 닉네임은 한글·영문·숫자·밑줄 2~20자이며, 입력 중 중복 확인과 저장 시 중복 거절을 처리합니다. 신규 사용자는 `PENDING`이고 저장 후 `USER`로 전환됩니다.
+- 내 집의 프로필 수정에서 닉네임·선택 프로필 사진·GitHub 주소·공개 연락 이메일을 설정합니다. 닉네임 입력 중 중복 여부를 표시하며, 중복 또는 확인 실패 상태에서는 저장할 수 없습니다. 본인의 집에서만 편집할 수 있으며, 로그인 이메일은 공개 연락처에 자동으로 넣지 않습니다. 사진 선택 후 미리보기·변경·삭제가 가능하며, 저장을 누르면 사진 업로드 후 프로필을 갱신합니다.
 - 인증 요청은 `credentials: "include"`로 쿠키를 전송합니다. 프론트는 JWT를 읽거나 저장하지 않으며 Authorization 헤더를 만들지 않습니다. 로그인 시작 시 `sessionStorage`에는 안전한 복귀 주소와 시작 시각만 저장합니다. 실제 로그인은 저장소가 차단되어도 진행하고, 복귀 정보가 없으면 홈으로 이동합니다.
 
 ### 프론트 미리보기
@@ -83,13 +83,15 @@ OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은
 프론트는 401 응답을 받으면 재발급 요청을 한 번 공유하여 처리하고 원래 요청을 재시도합니다.
 로그아웃은 서버의 쿠키 삭제·토큰 폐기를 확인한 뒤 사용자 상태를 비웁니다.
 
-온보딩 화면은 다음 API를 사용하도록 준비되어 있으며 **백엔드 구현은 별도로 필요합니다.**
+온보딩과 내 집 프로필 설정은 다음 API를 사용합니다. 백엔드 [사용자 온보딩 이슈 #17](https://github.com/Codeiary/Codeiary-BE/issues/17) 구현을 함께 적용해야 합니다.
 
 - `GET /api/users/nickname-availability?nickname=...` → `{ available: boolean }`.
-- `POST /api/users/me/onboarding` → `multipart/form-data`의 `nickname`, 선택 `profileImage`를 받고 완성된 사용자 프로필을 반환합니다. 중복은 `409 / NICKNAME_TAKEN`으로 응답합니다.
+- `POST /api/users/me/onboarding` → `multipart/form-data`의 `nickname`만 받고 온보딩이 완료된 사용자 프로필을 반환합니다. 중복은 `409 / NICKNAME_TAKEN`으로 응답합니다.
+- `POST /api/users/me/profile-image` → `multipart/form-data`의 `profileImage`로 사진을 보내고 `{ profileImageUrl: string }`을 받습니다. 선택한 원본은 브라우저에서 256×256 JPEG로 변환합니다. 목 인증에서는 브라우저에만 저장하고 실제 API에서는 S3에 업로드합니다.
+- `PUT /api/users/me/profile` → JSON의 `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`을 저장하고 갱신된 본인 프로필을 반환합니다. 비워 둔 선택 항목은 `null`로 보내 삭제합니다. `PENDING` 계정은 사용할 수 없습니다.
 
-프로필은 `id`, `email`, `name`, `nickname`, `profileImageUrl`, `onboardingCompleted`, `role`을 포함합니다.
-현재 백엔드 Google 로그인은 이미 등록된 활성 계정만 허용하며 신규 가입도 별도 구현이 필요합니다.
+프로필은 `id`, `email`, `name`, `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`, `onboardingCompleted`, `role`을 포함합니다.
+온보딩을 완료하지 않고 나가도 다시 로그인하면 `onboardingCompleted: false`를 확인해 온보딩 화면으로 이동합니다.
 
 ## 검증
 

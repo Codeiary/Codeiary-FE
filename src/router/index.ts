@@ -28,7 +28,7 @@ const router = createRouter({
       path: "/onboarding",
       name: "onboarding",
       component: () => import("@/views/OnboardingView.vue"),
-      meta: { requiresAuth: true, title: "프로필 설정 — Codeiary" },
+      meta: { requiresAuth: true, title: "닉네임 설정 — Codeiary" },
     },
     {
       path: "/admin/login",

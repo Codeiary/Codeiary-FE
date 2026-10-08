@@ -1,9 +1,10 @@
 import type { BlogAuthor } from "@/utils/blog/posts";
+import type { UserProfile } from "@/store/auth";
 import { neighborhoodLayout } from "./neighborhood-layouts";
 import type { HouseLevel } from "./residence-tiers";
 
 export interface Residence extends BlogAuthor {
-  role: "ADMIN" | "USER";
+  role: UserProfile["role"];
   postCount: number;
   level: HouseLevel;
   activityPoints: number | null;
