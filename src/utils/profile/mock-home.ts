@@ -14,6 +14,7 @@ export interface HomeProfile {
   owner: BlogAuthor;
   email: string;
   github: string;
+  profileImageUrl?: string | null;
   projects: HomeEntry[];
   issues: HomeEntry[];
 }
@@ -25,8 +26,9 @@ export function createMockHome(user: UserProfile | null): HomeProfile {
     owner: user
       ? { id: user.id, name: user.name, nickname: user.nickname }
       : { id: "demo-codeiary", name: "Codeiary" },
-    email: user?.email ?? "dnjstjt1297@gmail.com",
-    github: "https://github.com/dnjstjt1297",
+    email: user ? (user.contactEmail ?? "") : "dnjstjt1297@gmail.com",
+    github: user ? (user.githubUrl ?? "") : "https://github.com/dnjstjt1297",
+    profileImageUrl: user?.profileImageUrl ?? null,
     projects: [
       {
         id: "codeiary",

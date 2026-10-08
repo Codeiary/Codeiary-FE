@@ -3,6 +3,8 @@ import { displayName } from "@/utils/profile/display-name";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "@/components/Icon.vue";
 import PostCard from "@/components/blog/PostCard.vue";
+import ProfileEditor from "@/components/profile/ProfileEditor.vue";
+import { auth } from "@/store/auth";
 import type { BlogPost } from "@/utils/blog/posts";
 import type { HomeEntry, HomeProfile } from "@/utils/profile/mock-home";
 import { residenceTier, type HouseLevel } from "@/utils/city/residence-tiers";
@@ -23,6 +25,16 @@ type Section = "blog" | "portfolio" | "issues";
 const section = ref<Section>("blog");
 const selected = ref<HomeEntry>();
 const tabButtons = ref<HTMLButtonElement[]>([]);
+const editButton = ref<HTMLButtonElement>();
+const editing = ref(false);
+const profileNotice = ref("");
+const imageFailed = ref(false);
+const editableUser = computed(() => {
+  const user = auth.user.value;
+  return props.own && user && user.id === props.profile.owner.id && user.role !== "PENDING"
+    ? user
+    : null;
+});
 const tabs = computed(() => [
   {
     id: "blog" as const,
@@ -47,6 +59,15 @@ function selectSection(value: Section) {
   section.value = value;
   selected.value = undefined;
 }
+function editProfile() {
+  profileNotice.value = "";
+  editing.value = true;
+}
+function closeEditor(saved = false) {
+  editing.value = false;
+  profileNotice.value = saved ? "프로필을 저장했어요." : "";
+  nextTick(() => editButton.value?.focus());
+}
 function navigateTabs(event: KeyboardEvent, index: number) {
   const key = event.key;
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
@@ -63,8 +84,13 @@ function navigateTabs(event: KeyboardEvent, index: number) {
 }
 watch(
   () => props.profile.owner.id,
-  () => selectSection("blog"),
+  () => {
+    selectSection("blog");
+    closeEditor();
+  },
 );
+watch(() => props.profile.profileImageUrl, () => { imageFailed.value = false; });
+watch(editableUser, (user) => { if (!user) closeEditor(); });
 </script>
 
 <template>
@@ -72,7 +98,16 @@ watch(
     <div class="home-layout">
       <aside class="home-profile" aria-label="프로필과 연락처">
         <div class="home-avatar" aria-hidden="true">
-          {{ displayName(profile.owner).slice(0, 1) }}
+          <img
+            v-if="profile.profileImageUrl && !imageFailed"
+            :src="profile.profileImageUrl"
+            alt=""
+            loading="lazy"
+            decoding="async"
+            referrerpolicy="no-referrer"
+            @error="imageFailed = true"
+          />
+          <template v-else>{{ displayName(profile.owner).slice(0, 1) }}</template>
           <span><Icon name="home" :size="16" /></span>
         </div>
         <h3>{{ displayName(profile.owner) }}</h3>
@@ -112,8 +147,23 @@ watch(
             >
           </a>
         </div>
+        <button
+          v-if="editableUser && !editing"
+          ref="editButton"
+          type="button"
+          class="home-edit-profile"
+          aria-controls="home-profile-editor"
+          @click="editProfile"
+        >프로필 수정</button>
+        <p v-if="profileNotice" class="home-profile-notice" role="status">{{ profileNotice }}</p>
       </aside>
       <div class="home-main">
+        <ProfileEditor
+          v-if="editing && editableUser"
+          :user="editableUser"
+          @cancel="closeEditor()"
+          @saved="closeEditor(true)"
+        />
         <div
           class="home-tabs"
           role="tablist"
@@ -271,6 +321,36 @@ watch(
   border-radius: 11px;
   background: var(--theme-accent);
   color: var(--theme-surface);
+}
+.home-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.home-edit-profile {
+  justify-self: start;
+  margin-top: 20px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 9px;
+  background: var(--theme-raised);
+  color: var(--theme-text);
+  font-size: var(--font-size-min, 14px);
+}
+.home-edit-profile:hover {
+  color: var(--theme-accent);
+}
+.home-edit-profile:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+.home-profile-notice {
+  margin: 12px 0 0;
+  color: var(--theme-muted);
+  font-size: var(--font-size-min, 14px);
+  line-height: 1.6;
 }
 .home-profile h3 {
   margin: 24px 0;
@@ -507,6 +587,10 @@ watch(
     flex-wrap: wrap;
     gap: 12px 24px;
     margin-top: 20px;
+  }
+  .home-edit-profile,
+  .home-profile-notice {
+    grid-column: 1 / -1;
   }
   .home-contact {
     min-height: 44px;
