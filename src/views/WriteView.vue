@@ -18,7 +18,7 @@ import MarkdownEditor from "@/components/blog/MarkdownEditor.vue";
 import PostArticle from "@/components/blog/PostArticle.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
 import { auth } from "@/store/auth";
-import { authorSlug } from "@/utils/blog/slug";
+import { authorSlug, postSlug } from "@/utils/blog/slug";
 import {
   addImage,
   createDraft,
@@ -467,8 +467,8 @@ async function publish() {
     await router.replace({
       name: "blog-post",
       params: {
-        authorSlug: authorSlug(draft.author.name),
-        postSlug: post.slug,
+        authorSlug: authorSlug(post.author?.name || draft.author.name),
+        postSlug: post.slug || postSlug(post.title),
       },
       state: { blogPrevious: null },
     });
