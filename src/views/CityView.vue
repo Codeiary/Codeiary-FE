@@ -995,14 +995,24 @@ onBeforeUnmount(() => {
               <PostComments :key="commentPostKey(article)" :post="article" />
             </div>
             <div v-else-if="!route.params.postSlug" class="window-body blog-body">
-              <header class="window-heading">
-                <div>
-                  <span class="section-kicker">01 / BLOG HOUSE</span>
-                  <h2>나만의 이야기로 기록해보세요<span>.</span></h2>
+              <header class="window-heading blog-list-heading">
+                <span class="section-kicker">01 / BLOG HOUSE</span>
+                <div v-if="isOwnBlog || contentAction === 'blog'" class="blog-list-heading-actions">
+                  <button
+                    v-if="isOwnBlog"
+                    class="blog-home-button"
+                    aria-label="블로그 홈으로 이동"
+                    @click="selectBlogScope('all')"
+                  >
+                    <Icon name="arrow-left" :size="15" />
+                    <span>블로그 홈</span>
+                  </button>
+                  <ContentActions
+                    v-else
+                    action="blog"
+                    @action="handleContentAction"
+                  />
                 </div>
-                <span class="heading-icon blog-icon"
-                  ><Icon name="book" :size="32"
-                /></span>
               </header>
               <BlogPostList
                 :posts="scopedPosts"
@@ -1029,7 +1039,7 @@ onBeforeUnmount(() => {
               >
                 <template #actions>
                   <ContentActions
-                    :action="contentAction"
+                    :action="contentAction === 'blog' ? undefined : contentAction"
                     @action="handleContentAction"
                   />
                 </template>
