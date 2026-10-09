@@ -18,6 +18,9 @@ const props = defineProps<{
   tag: string;
   sort: "latest" | "views";
   page: number;
+  totalPages?: number;
+  loading?: boolean;
+  error?: string;
 }>();
 defineEmits<{
   "update:search": [value: string];
@@ -33,7 +36,7 @@ defineEmits<{
 // The caller supplies only posts this visitor is allowed to see.
 const categories = computed(() => categoryCounts(props.posts));
 const filteredPosts = computed(() =>
-  filterPosts(props.posts, {
+  props.totalPages !== undefined ? props.posts : filterPosts(props.posts, {
     search: props.search,
     category: props.personal ? props.category : "",
     tag: props.personal ? "" : props.tag,
@@ -42,12 +45,13 @@ const filteredPosts = computed(() =>
 );
 const pageSize = 12;
 const pageCount = computed(() =>
-  Math.max(1, Math.ceil(filteredPosts.value.length / pageSize)),
+  Math.max(1, props.totalPages ?? Math.ceil(filteredPosts.value.length / pageSize)),
 );
 const currentPage = computed(() =>
-  Math.min(Math.max(1, props.page), pageCount.value),
+  props.totalPages !== undefined ? props.page : Math.min(Math.max(1, props.page), pageCount.value),
 );
 const visiblePosts = computed(() => {
+  if (props.totalPages !== undefined) return filteredPosts.value;
   const start = (currentPage.value - 1) * pageSize;
   return filteredPosts.value.slice(start, start + pageSize);
 });
@@ -59,6 +63,7 @@ const visiblePosts = computed(() => {
     class="blog-collection"
     :class="{ 'blog-collection-personal': personal }"
     aria-labelledby="content-panel-title"
+    :aria-busy="loading"
   >
     <BlogCategories
       v-if="personal"
@@ -112,7 +117,8 @@ const visiblePosts = computed(() => {
         :page-count="pageCount"
         @select="$emit('update:page', $event)"
       />
-      <div v-if="!filteredPosts.length" class="empty-state blog-empty-state">
+      <p v-if="loading && !filteredPosts.length" role="status">게시글을 불러오고 있어요.</p>
+      <div v-else-if="!filteredPosts.length && !error" class="empty-state blog-empty-state">
         <span class="blog-empty-icon"><Icon name="book" :size="32" /></span>
         <template v-if="search.trim() || tag || category">
           <h3>찾는 이야기가 아직 없어요</h3>
@@ -134,6 +140,10 @@ const visiblePosts = computed(() => {
           <button v-else @click="$emit('update:category', '')">
             전체 글 보기
           </button>
+        </template>
+        <template v-else-if="!personal && page > 1">
+          <h3>이 페이지에는 글이 없어요</h3>
+          <button @click="$emit('update:page', 1)">첫 페이지로</button>
         </template>
         <template v-else-if="own">
           <h3>아직 작성한 글이 없어요</h3>

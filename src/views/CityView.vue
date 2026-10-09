@@ -2,6 +2,7 @@
 import { displayName } from "@/utils/profile/display-name";
 import {
   computed,
+  inject,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -23,7 +24,8 @@ import PostArticle from "@/components/blog/PostArticle.vue";
 import PostComments from "@/components/blog/comments/PostComments.vue";
 import { commentPostKey } from "@/utils/blog/comments";
 import { editPost } from "@/services/blog-storage";
-import { fetchPost, fetchPosts, removePost } from "@/services/blog-api";
+import { fetchPost, fetchPosts, fetchPostPage, removePost } from "@/services/blog-api";
+import { blogBootstrapKey, blogPageNumber, type BlogPage } from "@/utils/blog/page";
 import UserHome from "@/components/profile/UserHome.vue";
 import {
   createMockHome,
@@ -47,7 +49,10 @@ import MobileRunButton from "@/components/city/MobileRunButton.vue";
 const route = useRoute();
 const router = useRouter();
 const { user } = auth;
-const posts = shallowRef<BlogPost[]>([]);
+const bootstrap = inject(blogBootstrapKey, undefined);
+const initialPage = bootstrap?.url === route.fullPath.split("#")[0] ? bootstrap.page : undefined;
+const publicPage = shallowRef<BlogPage | undefined>(initialPage);
+const posts = shallowRef<BlogPost[]>(initialPage?.content ?? []);
 const directory = computed(() => residenceDirectory(user.value, posts.value));
 const neighbors = computed(() =>
   directory.value.filter((resident) => resident.id !== user.value?.id),
@@ -90,25 +95,55 @@ function placeName(id: Destination) {
   return id === "home" ? `${displayName(user.value)}의 집` : places[id].name;
 }
 const storageError = ref("");
+const postsLoading = ref(false);
+let postsRequest = 0;
 async function loadBlogPosts() {
+  const request = ++postsRequest;
+  postsLoading.value = true;
   try {
+    if (route.name === "blog") {
+      const result = await fetchPostPage({
+        search: search.value,
+        tag: selectedTag.value,
+        sort: postSort.value === "views" ? "VIEWS" : "LATEST",
+        page: blogPage.value - 1,
+      });
+      if (request !== postsRequest) return;
+      publicPage.value = result;
+      posts.value = result.content;
+      storageError.value = "";
+      return;
+    }
+    publicPage.value = undefined;
+    const selectedPost = posts.value.find((post) => post.author &&
+      authorSlug(post.author.name) === route.params.authorSlug &&
+      (post.slug || postSlug(post.title)) === route.params.postSlug);
     const params = {
       search: search.value,
       category: selectedCategory.value,
+      tag: selectedTag.value,
       sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
     };
     const [publicPosts, ownPosts] = await Promise.all([
       fetchPosts(params),
       user.value ? fetchPosts({ ...params, mine: true, sort: undefined }) : [],
     ]);
+    if (request !== postsRequest) return;
     posts.value = [
       ...ownPosts,
       ...publicPosts.filter((post) => !ownPosts.some((own) => own.id === post.id)),
     ];
+    if (selectedPost && !posts.value.some((post) => post.id === selectedPost.id)
+      && (selectedPost.visibility !== "PRIVATE" || selectedPost.author?.id === user.value?.id)) {
+      posts.value.push(selectedPost);
+    }
     storageError.value = "";
   } catch (error) {
+    if (request !== postsRequest) return;
     storageError.value = error instanceof Error ? error.message : "게시글을 불러오지 못했어요.";
     posts.value = [];
+  } finally {
+    if (request === postsRequest) postsLoading.value = false;
   }
 }
 const isBlogRoute = computed(() => route.meta.blog === true);
@@ -118,11 +153,7 @@ const postSort = computed(() =>
 const search = computed(() =>
   typeof route.query.q === "string" ? route.query.q : "",
 );
-const blogPage = computed(() => {
-  const page =
-    typeof route.query.page === "string" ? Number(route.query.page) : 1;
-  return Number.isSafeInteger(page) && page > 0 ? page : 1;
-});
+const blogPage = computed(() => blogPageNumber(route.query.page));
 const selectedCategory = computed(() =>
   route.params.authorSlug && typeof route.query.category === "string"
     ? route.query.category
@@ -246,13 +277,17 @@ const isOwnBlog = computed(() =>
 const blogScope = computed(() =>
   !route.params.authorSlug ? "all" : isOwnBlog.value ? "mine" : "author",
 );
+let initialLoad = true;
 watch(
   () => [user.value?.id, route.fullPath],
-  async (_id, _old, onCleanup) => {
-    let stale = false;
-    onCleanup(() => { stale = true; });
-    await loadBlogPosts();
-    if (stale) return;
+  () => {
+    if (import.meta.env.SSR) return;
+    if (initialLoad && initialPage) {
+      initialLoad = false;
+      return;
+    }
+    initialLoad = false;
+    void loadBlogPosts();
   },
   { immediate: true },
 );
@@ -276,9 +311,13 @@ const scopedPosts = computed(() =>
   }),
 );
 const article = shallowRef<BlogPost | null>(null);
+const articleLoading = ref(false);
+let articleRequest = 0;
 watch(
   () => [route.params.authorSlug, route.params.postSlug, posts.value],
   async () => {
+    const request = ++articleRequest;
+    articleLoading.value = false;
     article.value = null;
     if (!route.params.postSlug) return;
     const candidate = scopedPosts.value.find(
@@ -289,10 +328,14 @@ watch(
         (post.slug || postSlug(post.title)) === route.params.postSlug,
     );
     if (!candidate) return;
+    articleLoading.value = true;
     try {
-      article.value = await fetchPost(candidate.id);
+      const completePost = await fetchPost(candidate.id);
+      if (request === articleRequest) article.value = completePost;
     } catch {
-      article.value = candidate;
+      if (request === articleRequest) article.value = candidate;
+    } finally {
+      if (request === articleRequest) articleLoading.value = false;
     }
   },
   { immediate: true },
@@ -302,7 +345,7 @@ const blogNotFound = computed(
   () =>
     isBlogRoute.value &&
     ((Boolean(route.params.authorSlug) && !blogOwner.value) ||
-      (Boolean(route.params.postSlug) && !article.value)),
+      (Boolean(route.params.postSlug) && !article.value && !articleLoading.value && !postsLoading.value)),
 );
 function restoreBlogScroll(top = 0) {
   nextTick(() =>
@@ -428,11 +471,11 @@ async function continueEditing() {
 }
 watch(
   () => user.value?.id,
-  () => {
+  (_userId, previousUserId) => {
     blogLocations.clear();
     if (!user.value && panel.value === "home" && !visitingResident.value)
       void closePanel();
-    if (isBlogRoute.value)
+    if (isBlogRoute.value && previousUserId !== undefined)
       void router.replace({ name: "blog", state: { blogPrevious: null } });
   },
 );
@@ -458,11 +501,12 @@ watch(
           (view === "home" && (user.value || visitingResident.value))
         ? view
         : null;
-    if (!previousPanel && nextPanel)
+    if (!previousPanel && nextPanel && typeof document !== "undefined")
       previousFocus = document.activeElement as HTMLElement;
     panel.value = nextPanel;
     selectedProject.value = null;
     newsSelection.value = null;
+    if (import.meta.env.SSR) return;
     nextTick(() => {
       if (nextPanel) {
         if (nextPanel !== previousPanel)
@@ -663,6 +707,7 @@ watch([panel, searchOpen], ([value, searching]) =>
   city?.setPaused(Boolean(value) || searching),
 );
 onMounted(async () => {
+  if (bootstrap) bootstrap.url = "";
   if (route.query.access === "denied") notify("관리자만 접근할 수 있어요.");
   window.addEventListener("keydown", keyDown);
   window.addEventListener("keyup", keyUp);
@@ -786,19 +831,6 @@ onBeforeUnmount(() => {
           <kbd class="wide-key">↵</kbd><span>입장</span>
         </div>
       </div>
-      <div class="world-signature">
-        <strong>기여</strong>
-        <a
-          class="contributor-link"
-          href="https://github.com/dnjstjt1297"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="기여자 김원석의 GitHub 프로필 (새 탭)"
-        >
-          <Icon name="github" :size="17" /><span>김원석</span
-          ><Icon name="arrow" :size="12" />
-        </a>
-      </div>
       <MobileRunButton
         :disabled="!ready || error || Boolean(panel) || searchOpen"
         @change="city?.setRunning($event)"
@@ -840,7 +872,6 @@ onBeforeUnmount(() => {
             :active="panel"
             @home="home"
             @navigate="openPanel"
-            @close="closePanel"
           />
           <ContentActions
             v-if="panel !== 'blog' || article || blogNotFound"
@@ -888,7 +919,7 @@ onBeforeUnmount(() => {
             }}
           </h2>
           <p
-            v-if="panel === 'blog' && isOwnBlog && storageError"
+            v-if="panel === 'blog' && storageError"
             class="blog-storage-error"
             role="alert"
           >
@@ -963,7 +994,7 @@ onBeforeUnmount(() => {
               </PostArticle>
               <PostComments :key="commentPostKey(article)" :post="article" />
             </div>
-            <div v-else class="window-body blog-body">
+            <div v-else-if="!route.params.postSlug" class="window-body blog-body">
               <header class="window-heading">
                 <div>
                   <span class="section-kicker">01 / BLOG HOUSE</span>
@@ -982,6 +1013,9 @@ onBeforeUnmount(() => {
                 :tag="selectedTag"
                 :sort="postSort"
                 :page="blogPage"
+                :total-pages="route.name === 'blog' ? (publicPage?.totalPages ?? 0) : undefined"
+                :loading="postsLoading"
+                :error="storageError"
                 @update:page="selectBlogPage"
                 @update:search="updateBlogQuery('q', $event)"
                 @update:category="updateBlogQuery('category', $event)"

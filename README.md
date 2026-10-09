@@ -40,7 +40,7 @@ Vue 3와 Three.js로 구현한 도시형 개인 블로그입니다. 화면 전�
 WebGL을 사용할 수 없는 환경에서는 상단 메뉴로 콘텐츠를 볼 수 있습니다.
 
 API 요청은 운영 환경에서 같은 오리진의 `/api`를 사용합니다. 개발 서버에서는
-`vite.config.ts`가 `/api`, `/oauth2`, `/login/oauth2` 요청을 `http://localhost:8080`으로 프록시합니다.
+`server/index.mjs`가 `/api`, `/oauth2`, `/login/oauth2` 요청을 `http://localhost:8080`으로 프록시합니다.
 운영 Nginx도 같은 OAuth 시작·콜백 경로를 백엔드에 전달합니다.
 
 ## Google 로그인 / 온보딩
@@ -102,8 +102,26 @@ CI에서도 테스트 통과 후 타입 검사와 프로덕션 빌드를 실행�
 
 ## Lightsail 배포
 
-`main` 브랜치에 push하면 GitHub Actions가 정적 파일을 Docker 이미지로 패키징해
-Amazon ECR Public에 게시하고, SSM Run Command로 `/var/www/codeiary`와 Nginx 설정을 배포합니다.
+`main` 브랜치에 push하면 GitHub Actions가 클라이언트·SSR 번들을 Docker 이미지로 패키징해
+Amazon ECR Public에 게시합니다. SSM Run Command로 정적 파일은 `/var/www/codeiary`에 복사하고,
+Node 서버는 `codeiary-fe` 컨테이너로 실행합니다. Nginx는 `/blog` 요청만 내부 `127.0.0.1:3000`으로 전달합니다.
+API·OAuth는 기존 백엔드로, 나머지 화면과 정적 자산은 기존 Nginx 경로로 제공합니다.
+정적 파일만 교체하면 SSR은 동작하지 않으므로 Docker·Nginx 설정도 함께 배포해야 합니다.
+
+### 블로그 SSR
+
+- `/blog`: 공개 글 12개와 페이지 링크를 서버에서 렌더링하고 브라우저에서 hydrate합니다.
+- `/blog?page=2` 이후: CSR이며 최초 응답의 robots 메타 태그와 `X-Robots-Tag`에 `noindex, nofollow`를 설정합니다.
+- `/blog?page=1`은 `/blog`로 리다이렉트합니다. 각 페이지의 canonical은 해당 페이지 주소입니다.
+- 검색·정렬 결과도 색인에서 제외합니다. SPA 이동 시 메타 태그를 갱신하고 다른 화면으로 나가면 제거합니다.
+- 서버는 인증 쿠키를 전달하지 않고 공개 목록만 조회합니다. 로그인 상태와 테마는 hydration 후 브라우저에서 복구합니다.
+- 공개 API 장애 시 빈 목록을 200으로 색인시키지 않도록 503을 반환합니다.
+- robots.txt는 페이지네이션을 차단하지 않습니다. 검색엔진이 응답의 `noindex`를 읽을 수 있어야 합니다.
+- 현재 sitemap.xml은 홈과 블로그 목록만 포함합니다. 후속 페이지의 `nofollow`로 제한되는 글 탐색은 공개 게시글 사이트맵을 추가해 보완할 수 있습니다.
+
+로컬 개발은 `npm run dev`(5173), 빌드 결과 확인은 `npm run build && npm run preview`(3000)를 사용합니다.
+`API_ORIGIN`은 백엔드 주소(기본 `http://localhost:8080`), `PORT`와 `HOST`는 프론트 서버 바인딩 설정입니다.
+Google OAuth 로컬 콜백은 5173에 등록되어 있으므로 인증을 확인할 때는 개발 서버를 사용합니다.
 
 GitHub Actions repository variables:
 

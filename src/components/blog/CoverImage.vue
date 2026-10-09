@@ -50,6 +50,10 @@ watch(
       stale = true;
     });
     imageUrl.value = "";
+    if (src && /^https?:\/\//i.test(src)) {
+      imageUrl.value = src;
+      return;
+    }
     if (!src || authorId === undefined || !shouldLoad) return;
     try {
       const images = await resolveImages(src, authorId);

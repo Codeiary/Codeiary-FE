@@ -452,6 +452,7 @@ async function publish() {
           title: data.title,
           content: data.content,
           category: data.category,
+          tags: data.tags,
           representativeImageUrl: data.coverImage ?? null,
           publicPost: data.visibility !== "PRIVATE",
         })
@@ -459,6 +460,7 @@ async function publish() {
           title: data.title,
           content: data.content,
           category: data.category,
+          tags: data.tags,
           representativeImageUrl: data.coverImage ?? null,
           publicPost: data.visibility !== "PRIVATE",
       });

@@ -530,14 +530,14 @@
   .blog-filter .content-actions {
     gap: 4px;
   }
-  .blog-filter .content-actions :is(.blog-my-posts, .content-exit) {
+  .blog-filter .content-actions .blog-my-posts {
     width: 36px;
     min-height: 36px;
     padding: 0;
     justify-content: center;
     gap: 0;
   }
-  .blog-filter .content-actions :is(.blog-my-posts, .content-exit) > span {
+  .blog-filter .content-actions .blog-my-posts > span {
     display: none;
   }
   .content-window.blog .blog-write-button {

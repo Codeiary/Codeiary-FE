@@ -16,6 +16,13 @@ const blogApiMock = vi.hoisted(() => ({
 }));
 
 vi.mock("@/services/blog-api", () => ({
+  fetchPostPage: async ({ page, search, sort, tag }: { page: number; search?: string; sort?: string; tag?: string }) => {
+    const { filterPosts } = await import("@/utils/blog/post-collection");
+    const posts = filterPosts(blogApiMock.posts.filter((post) => post.visibility !== "PRIVATE"), {
+      search: search ?? "", category: "", tag: tag ?? "", sort: sort === "VIEWS" ? "views" : "latest",
+    });
+    return { content: posts.slice(page * 12, (page + 1) * 12), page, totalPages: Math.ceil(posts.length / 12), totalElements: posts.length };
+  },
   fetchPosts: async ({ mine }: { mine?: boolean } = {}) =>
     blogApiMock.posts.filter((post) =>
       mine
@@ -363,7 +370,7 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     await wrapper.findAll(".post-open")[1]!.trigger("click");
     await flushPromises();
-    await wrapper.get(".content-exit").trigger("click");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await flushPromises();
     await wrapper
       .findAll(".site-header:not([inert]) nav > button")[0]!
