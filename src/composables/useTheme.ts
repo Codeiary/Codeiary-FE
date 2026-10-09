@@ -15,13 +15,14 @@ function initialTheme(): Theme {
     : "light";
 }
 
-const theme = ref<Theme>(initialTheme());
+const theme = ref<Theme>("light");
 const isDark = computed(() => theme.value === "dark");
 let initialized = false;
 
 export function initializeTheme() {
   if (initialized) return;
   initialized = true;
+  theme.value = initialTheme();
   watch(
     theme,
     (value) => {
