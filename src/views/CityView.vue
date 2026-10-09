@@ -92,12 +92,19 @@ function placeName(id: Destination) {
 const storageError = ref("");
 async function loadBlogPosts() {
   try {
-    posts.value = await fetchPosts({
-      mine: blogScope.value === "mine",
+    const params = {
       search: search.value,
       category: selectedCategory.value,
-      sort: postSort.value === "views" ? "VIEWS" : "LATEST",
-    });
+      sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
+    };
+    const [publicPosts, ownPosts] = await Promise.all([
+      fetchPosts(params),
+      user.value ? fetchPosts({ ...params, mine: true, sort: undefined }) : [],
+    ]);
+    posts.value = [
+      ...ownPosts,
+      ...publicPosts.filter((post) => !ownPosts.some((own) => own.id === post.id)),
+    ];
     storageError.value = "";
   } catch (error) {
     storageError.value = error instanceof Error ? error.message : "게시글을 불러오지 못했어요.";

@@ -7,13 +7,25 @@ import { auth, type UserProfile } from "@/store/auth";
 import { userFixture } from "./fixtures/auth";
 import { cityRoutes } from "@/router/city-routes";
 import { mockAccountProgress } from "@/services/mock-neighborhood";
+import { blogPostsFixture } from "./fixtures/blog";
 
 const setHome = vi.hoisted(() => vi.fn());
+const blogApiMock = vi.hoisted(() => ({
+  posts: [] as import("@/utils/blog/posts").BlogPost[],
+  userId: 1,
+}));
 
-vi.mock("@/utils/blog/posts", async () => {
-  const { blogPostsFixture } = await import("./fixtures/blog");
-  return { demoPosts: blogPostsFixture() };
-});
+vi.mock("@/services/blog-api", () => ({
+  fetchPosts: async ({ mine }: { mine?: boolean } = {}) =>
+    blogApiMock.posts.filter((post) =>
+      mine
+        ? post.author?.id === blogApiMock.userId
+        : post.visibility !== "PRIVATE",
+    ),
+  fetchPost: async (id: number) =>
+    blogApiMock.posts.find((post) => post.id === id),
+  removePost: vi.fn(),
+}));
 vi.mock("@/store/auth", async () => {
   const { shallowRef } = await import("vue");
   return { auth: { user: shallowRef(null) } };
@@ -65,6 +77,8 @@ describe("블로그 글 목록", () => {
   beforeEach(() => {
     user.value = null;
     setHome.mockClear();
+    blogApiMock.posts = blogPostsFixture();
+    blogApiMock.userId = 1;
   });
   afterEach(() => {
     wrappers.splice(0).forEach((wrapper) => {
@@ -93,6 +107,7 @@ describe("블로그 글 목록", () => {
       await flushPromises();
       expect(setHome).toHaveBeenLastCalledWith(5);
       user.value = { ...userFixture("USER"), id: 2 };
+      blogApiMock.userId = 2;
       await flushPromises();
       expect(setHome).toHaveBeenLastCalledWith(1);
       user.value = null;
@@ -106,6 +121,7 @@ describe("블로그 글 목록", () => {
 
   it("내 블로그에서 본인 글과 비공개 글을 볼 수 있다.", async () => {
     user.value = userFixture("USER");
+    blogApiMock.userId = user.value.id;
     const wrapper = await render();
     await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
     await flushPromises();
@@ -157,6 +173,7 @@ describe("블로그 글 목록", () => {
     await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
     await flushPromises();
     user.value = { ...userFixture("USER"), id: 2 };
+    blogApiMock.userId = 2;
     await flushPromises();
     expect(wrapper.get("#content-panel-title").text()).toBe("Blog House");
     await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
