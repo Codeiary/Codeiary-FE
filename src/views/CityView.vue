@@ -311,9 +311,11 @@ const scopedPosts = computed(() =>
   }),
 );
 const article = shallowRef<BlogPost | null>(null);
+let articleRequest = 0;
 watch(
   () => [route.params.authorSlug, route.params.postSlug, posts.value],
   async () => {
+    const request = ++articleRequest;
     article.value = null;
     if (!route.params.postSlug) return;
     const candidate = scopedPosts.value.find(
@@ -324,10 +326,13 @@ watch(
         (post.slug || postSlug(post.title)) === route.params.postSlug,
     );
     if (!candidate) return;
+    // Keep the clicked list item visible while the full article request runs.
+    article.value = candidate;
     try {
-      article.value = await fetchPost(candidate.id);
+      const completePost = await fetchPost(candidate.id);
+      if (request === articleRequest) article.value = completePost;
     } catch {
-      article.value = candidate;
+      // The list item remains available if the detail request fails.
     }
   },
   { immediate: true },
@@ -337,7 +342,7 @@ const blogNotFound = computed(
   () =>
     isBlogRoute.value &&
     ((Boolean(route.params.authorSlug) && !blogOwner.value) ||
-      (Boolean(route.params.postSlug) && !article.value)),
+      (Boolean(route.params.postSlug) && !article.value && !postsLoading.value)),
 );
 function restoreBlogScroll(top = 0) {
   nextTick(() =>
