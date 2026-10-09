@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-import "fake-indexeddb/auto";
-import { deleteDB } from "idb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { ref } from "vue";
@@ -8,11 +6,12 @@ import { createRouter, createMemoryHistory } from "vue-router";
 import type { UserProfile } from "@/store/auth";
 import PostComments from "@/components/blog/comments/PostComments.vue";
 import CommentComposer from "@/components/blog/comments/CommentComposer.vue";
-import { createComment } from "@/services/comment-storage";
-import { commentPostKey } from "@/utils/blog/comments";
+import { readComments } from "@/services/comment-api";
+import type { Comment } from "@/utils/blog/comments";
 import { postFixture } from "./fixtures/blog";
 import { commentAuthorFixture } from "./fixtures/comments";
 import { userFixture } from "./fixtures/auth";
+const stored = vi.hoisted(() => ({ comments: [] as Comment[], nextId: 1 }));
 vi.mock("@/store/auth", () => ({
   auth: {
     get user() {
@@ -20,11 +19,47 @@ vi.mock("@/store/auth", () => ({
     },
   },
 }));
+vi.mock("@/services/comment-api", () => ({
+  readComments: vi.fn(async (postId: number) =>
+    stored.comments.filter((comment) => comment.targetId === postId),
+  ),
+  createComment: vi.fn(async (postId: number, content: string, parentId: number | null) => {
+    if (!session.value) throw new Error("로그인 후 댓글을 작성해 주세요.");
+    const author = {
+      id: session.value.id,
+      name: session.value.nickname || session.value.name,
+      nickname: session.value.nickname,
+      profileImageUrl: session.value.profileImageUrl,
+    };
+    const comment: Comment = {
+      id: stored.nextId++, targetType: "BLOG_POST", targetId: postId, parentId,
+      author, content, createdAt: new Date().toISOString(), updatedAt: null, deleted: false,
+    };
+    stored.comments.push(comment);
+    return comment;
+  }),
+  updateComment: vi.fn(async (postId: number, id: number, content: string) => {
+    const comment = stored.comments.find((item) => item.id === id && item.targetId === postId);
+    if (!comment || comment.author?.id !== session.value?.id) throw new Error("내가 작성한 댓글만 수정할 수 있어요.");
+    comment.content = content;
+    comment.updatedAt = new Date().toISOString();
+    return comment;
+  }),
+  deleteComment: vi.fn(async (postId: number, id: number) => {
+    const comment = stored.comments.find((item) => item.id === id && item.targetId === postId);
+    if (!comment || comment.author?.id !== session.value?.id) throw new Error("내가 작성한 댓글만 삭제할 수 있어요.");
+    comment.content = "";
+    comment.author = null;
+    comment.deleted = true;
+    return undefined;
+  }),
+}));
 const session = ref<UserProfile | null>(null);
 const wrappers: VueWrapper[] = [];
-beforeEach(async () => {
+beforeEach(() => {
   session.value = null;
-  await deleteDB("codeiary.comments.mock.v1");
+  stored.comments = [];
+  stored.nextId = 1;
 });
 afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
 async function render() {
@@ -45,13 +80,16 @@ async function render() {
   await vi.waitFor(() => expect(wrapper.text()).not.toContain("불러오는 중"));
   return wrapper;
 }
+function seedComment(author: ReturnType<typeof commentAuthorFixture>, content: string) {
+  const post = postFixture();
+  stored.comments.push({
+    id: stored.nextId++, targetType: "BLOG_POST", targetId: post.id, parentId: null,
+    author, content, createdAt: new Date().toISOString(), updatedAt: null, deleted: false,
+  });
+}
 describe("댓글 화면", () => {
   it("비로그인 사용자가 댓글을 읽고 현재 글로 돌아오는 로그인 링크를 볼 수 있다.", async () => {
-    await createComment(
-      commentPostKey(postFixture()),
-      commentAuthorFixture(),
-      "읽을 수 있는 댓글",
-    );
+    seedComment(commentAuthorFixture(), "읽을 수 있는 댓글");
     const wrapper = await render();
     expect(wrapper.text()).toContain("읽을 수 있는 댓글");
     expect(wrapper.find("textarea").exists()).toBe(false);
@@ -59,6 +97,15 @@ describe("댓글 화면", () => {
     expect(wrapper.get(".comments-login a").attributes("href")).toContain(
       "redirect=/blog/test/post",
     );
+  });
+  it("다른 창에서 돌아와도 댓글을 다시 요청하지 않는다.", async () => {
+    await render();
+    const requestCount = vi.mocked(readComments).mock.calls.length;
+
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(vi.mocked(readComments)).toHaveBeenCalledTimes(requestCount);
   });
   it("닉네임으로 댓글을 등록하고 수정 및 삭제를 확인할 수 있다.", async () => {
     session.value = { ...userFixture(), nickname: "커밋여행자" };
@@ -82,11 +129,7 @@ describe("댓글 화면", () => {
     );
   });
   it("다른 사용자의 댓글에 답글을 달고 계정을 바꾸면 작성 내용을 비울 수 있다.", async () => {
-    await createComment(
-      commentPostKey(postFixture()),
-      commentAuthorFixture({ id: 2 }),
-      "다른 사람의 댓글",
-    );
+    seedComment(commentAuthorFixture({ id: 2 }), "다른 사람의 댓글");
     session.value = userFixture();
     const wrapper = await render();
     expect(wrapper.find('[aria-label="댓글 삭제"]').exists()).toBe(false);

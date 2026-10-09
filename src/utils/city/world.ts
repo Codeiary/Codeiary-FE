@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { createBoundaryFog } from "./boundary-fog";
 import { createResidenceModels } from "./residence-model";
 import { normalizeHouseLevel, type HouseLevel } from "./residence-tiers";
 import { createLandmarks } from "./landmarks";
@@ -50,8 +49,11 @@ export interface CityHandlers {
 }
 export interface CityController {
   visit: (id: Destination) => boolean;
+  getPlayerPosition: () => Point;
+  setPlayerPosition: (position: Point) => void;
   setNight: (night: boolean) => void;
   resetCamera: () => void;
+  returnFromVisit: () => void;
   setInput: (key: string, pressed: boolean) => void;
   setJoystick: (direction: Point) => void;
   setRunning: (running: boolean) => void;
@@ -72,7 +74,6 @@ export function createCity(
   handlers: CityHandlers,
 ): CityController {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog("#e8e4d9", 170, 290);
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
@@ -91,6 +92,7 @@ export function createCity(
   let mobileViewport = canvas.getBoundingClientRect().width < 650;
   const viewTarget = initialTarget.clone();
   let currentDistrict = -1;
+  let returnPosition: THREE.Vector3 | null = null;
   let totalDistricts = 0;
   camera.position.copy(initialTarget).add(new THREE.Vector3(78, 88, 100));
   const controls = new OrbitControls(camera, canvas);
@@ -135,13 +137,11 @@ export function createCity(
   fill.position.set(50, 20, -60);
   scene.add(fill);
 
-  const boundaryFog = createBoundaryFog();
   const mats = new Map<string, THREE.MeshStandardMaterial>();
   function material(color: string, roughness = 0.9) {
     const k = color + roughness;
     if (!mats.has(k)) {
       const surface = new THREE.MeshStandardMaterial({ color, roughness });
-      boundaryFog.apply(surface);
       mats.set(k, surface);
     }
     return mats.get(k)!;
@@ -273,8 +273,7 @@ export function createCity(
   water.position.set(800, -1.4, -9);
   scene.add(water);
   const roadColor = "#637879";
-  // Cheap continuous surfaces keep the street seamless underneath the loading mist.
-  // Only the buildings, props and road markings are streamed per district.
+  // Continuous surfaces keep the street seamless while buildings and details stream by district.
   const residentialSurfaces = [
     residentialGround,
     box(land, 134, 0.12, 8, 100, 0.2, 68, "#e7dfcb", false),
@@ -1046,8 +1045,9 @@ export function createCity(
       obstacles: Obstacle[];
     }
   >();
+  let activeHomes: ResidentBuilding[] = [];
   function districtHomes() {
-    return [...districts.values()].flatMap((district) => district.homes);
+    return activeHomes;
   }
   function buildDistrict(block: NeighborhoodBlock) {
     const group = new THREE.Group();
@@ -1589,7 +1589,8 @@ export function createCity(
     for (const block of blocks)
       if (!districts.has(block.page))
         districts.set(block.page, buildDistrict(block));
-    boundaryFog.setBlocks(blocks.map((block) => block.page));
+    activeHomes = [...districts.values()].flatMap((district) => district.homes);
+    renderPaused();
   }
 
   function walkBounds() {
@@ -1629,6 +1630,8 @@ export function createCity(
     gaitPhase = 0,
     lastNotification = 0;
   const projected = new THREE.Vector3();
+  const cameraMove = new THREE.Vector3();
+  const placeIds = Object.keys(places) as Destination[];
   const raycaster = new THREE.Raycaster();
   let pointerStart = { x: 0, y: 0 };
   const pointerDown = (event: PointerEvent) => {
@@ -1712,18 +1715,21 @@ export function createCity(
     controls.target.copy(viewTarget);
     camera.position.copy(viewTarget).add(offset);
     updateProjection(width, height);
+    renderPaused();
   }
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
   resize();
   function visit(id: Destination) {
     if (paused || (id === "home" && !homeAvailable)) return false;
+    const startPosition = player.group.position.clone();
     if (
       Math.hypot(
         player.group.position.x - places[id].entrance.x,
         player.group.position.z - places[id].entrance.z,
       ) < 3.6
     ) {
+      returnPosition = startPosition;
       suppressed = id;
       handlers.enter(id);
       return true;
@@ -1736,7 +1742,10 @@ export function createCity(
     );
     routeResidence = null;
     routeDestination = route.length ? id : null;
-    if (route.length) handlers.travelling(id);
+    if (route.length) {
+      returnPosition = startPosition;
+      handlers.travelling(id);
+    }
     return route.length > 0;
   }
   function visitResidence(index: number) {
@@ -1745,6 +1754,7 @@ export function createCity(
     if (!home) return false;
     const p = player.group.position;
     if (Math.hypot(p.x - home.entrance.x, p.z - home.entrance.z) < 3.6) {
+      returnPosition = p.clone();
       suppressedResidence = index;
       handlers.enterResidence(home.resident);
       return true;
@@ -1752,7 +1762,10 @@ export function createCity(
     route = findPath(p, home.entrance, obstacles, walkBounds());
     routeDestination = null;
     routeResidence = route.length ? index : null;
-    if (route.length) handlers.travellingResidence(home.resident);
+    if (route.length) {
+      returnPosition = p.clone();
+      handlers.travellingResidence(home.resident);
+    }
     return route.length > 0;
   }
   function goToDistrict(page: number) {
@@ -1770,8 +1783,9 @@ export function createCity(
     );
   }
   function animate(timestamp: number) {
-    if (disposed) return;
-    animationId = requestAnimationFrame(animate);
+    animationId = 0;
+    if (disposed || paused) return;
+    requestNextFrame();
     const delta = Math.min((timestamp - (lastTime || timestamp)) / 1000, 0.12);
     lastTime = timestamp;
     time += delta;
@@ -1864,7 +1878,7 @@ export function createCity(
         position.y = 0.3 + (position.y - 0.3) * settle;
       }
       nearest = null;
-      for (const id of Object.keys(places) as Destination[]) {
+      for (const id of placeIds) {
         if (id === "home" && !homeAvailable) continue;
         const p = places[id].entrance,
           distance = Math.hypot(position.x - p.x, position.z - p.z);
@@ -1928,15 +1942,14 @@ export function createCity(
       );
       handlers.districtChanged(district);
     }
-    const cameraMove = viewTarget
-      .clone()
+    cameraMove
+      .copy(viewTarget)
       .sub(controls.target)
       .multiplyScalar(1 - Math.exp(-delta * 4));
     controls.target.add(cameraMove);
     camera.position.add(cameraMove);
     sun.position.x = viewTarget.x - initialTarget.x - 35;
     sun.target.position.x = viewTarget.x - initialTarget.x;
-    boundaryFog.update(delta);
     playerRing.position.set(position.x, 0.45, position.z);
     playerPointer.position.set(
       position.x,
@@ -2013,12 +2026,11 @@ export function createCity(
     fountainDrops.forEach((drop, i) => {
       drop.position.y = 2.55 + Math.sin(time * 4 + i * 0.7) * 0.35;
     });
-    waterMat.color.set(night ? "#365f70" : "#7cb9ba");
     controls.update();
     if (timestamp - lastNotification > 50) {
       const rect = canvas.getBoundingClientRect();
       handlers.labels(
-        (Object.keys(places) as Destination[]).map((id) => {
+        placeIds.map((id) => {
           const p = places[id];
           projected
             .set(p.x, (id === "home" ? mainHomeHeight : p.height) + 1.2, p.z)
@@ -2060,19 +2072,34 @@ export function createCity(
     }
     renderer.render(scene, camera);
   }
-  scene.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return;
-    for (const surface of Array.isArray(object.material)
-      ? object.material
-      : [object.material]) {
-      boundaryFog.apply(surface);
-    }
-  });
-  animationId = requestAnimationFrame(animate);
+  function requestNextFrame() {
+    if (!animationId && !paused && !disposed)
+      animationId = requestAnimationFrame(animate);
+  }
+  function renderPaused() {
+    if (paused && !disposed) renderer.render(scene, camera);
+  }
+  requestNextFrame();
   handlers.ready();
 
   return {
     visit,
+    getPlayerPosition() {
+      return { x: player.group.position.x, z: player.group.position.z };
+    },
+    setPlayerPosition(position) {
+      if (!Number.isFinite(position.x) || !Number.isFinite(position.z)) return;
+      const target = {
+        x: Math.max(WORLD_BOUNDS.minX, Math.min(WORLD_BOUNDS.maxX, position.x)),
+        z: Math.max(WORLD_BOUNDS.minZ, Math.min(WORLD_BOUNDS.maxZ, position.z)),
+      };
+      if (!canWalk(target, obstacles, WORLD_BOUNDS)) return;
+      player.group.position.set(target.x, 0.3, target.z);
+      route = [];
+      routeDestination = null;
+      routeResidence = null;
+      renderPaused();
+    },
     setNeighborhood,
     goToDistrict,
     visitResidence,
@@ -2082,7 +2109,10 @@ export function createCity(
         if (ring.userData.home) ring.visible = homeAvailable;
       });
       const level = normalizeHouseLevel(value);
-      if (level === mainHomeLevel) return;
+      if (level === mainHomeLevel) {
+        renderPaused();
+        return;
+      }
       mainHomeLevel = level;
       const destinationIndex = destinations.indexOf(mainHome);
       const obstacleIndex = obstacles.findIndex(
@@ -2100,6 +2130,7 @@ export function createCity(
       mainHomeHeight = model.labelHeight;
       mainHome.userData.destination = "home";
       destinations[destinationIndex] = mainHome;
+      renderPaused();
     },
     setNight(value) {
       night = value;
@@ -2110,7 +2141,7 @@ export function createCity(
       sun.intensity = value ? 0.55 : 3.4;
       sun.color.set(value ? "#9cb3da" : "#fff0d6");
       renderer.toneMappingExposure = value ? 0.9 : 1.18;
-      scene.fog = new THREE.Fog(value ? "#25374b" : "#e8e4d9", 170, 290);
+      waterMat.color.set(value ? "#365f70" : "#7cb9ba");
       const windowMaterial = material("#526e72");
       windowMaterial.emissive.set(value ? "#e7bd7f" : "#000000");
       windowMaterial.emissiveIntensity = value ? 0.65 : 0;
@@ -2119,6 +2150,7 @@ export function createCity(
         mat.emissive.set(value ? "#ffe5a0" : "#000000");
         mat.emissiveIntensity = value ? 2 : 0;
       }
+      renderPaused();
     },
     resetCamera() {
       camera.position.copy(viewTarget).add(new THREE.Vector3(78, 88, 100));
@@ -2126,6 +2158,19 @@ export function createCity(
       camera.zoom = defaultZoom();
       camera.updateProjectionMatrix();
       controls.update();
+    },
+    returnFromVisit() {
+      if (!returnPosition) return;
+      player.group.position.copy(returnPosition);
+      player.group.position.y = 0.3;
+      returnPosition = null;
+      keys.clear();
+      joystick.x = joystick.z = 0;
+      route = [];
+      routeDestination = null;
+      routeResidence = null;
+      suppressed = null;
+      suppressedResidence = null;
     },
     setInput(key, pressed) {
       if (pressed) keys.add(key);
@@ -2141,14 +2186,21 @@ export function createCity(
       touchRunning = !paused && value;
     },
     setPaused(value) {
+      if (paused === value) return;
       paused = value;
       if (value) {
+        cancelAnimationFrame(animationId);
+        animationId = 0;
         touchRunning = false;
         keys.clear();
         joystick.x = joystick.z = 0;
         route = [];
         routeDestination = null;
         routeResidence = null;
+        renderPaused();
+      } else {
+        lastTime = 0;
+        requestNextFrame();
       }
     },
     interact() {

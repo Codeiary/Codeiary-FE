@@ -53,7 +53,8 @@ const bootstrap = inject(blogBootstrapKey, undefined);
 const initialPage = bootstrap?.url === route.fullPath.split("#")[0] ? bootstrap.page : undefined;
 const publicPage = shallowRef<BlogPage | undefined>(initialPage);
 const posts = shallowRef<BlogPost[]>(initialPage?.content ?? []);
-const directory = computed(() => residenceDirectory(user.value, posts.value));
+const discoveredPosts = shallowRef<BlogPost[]>(initialPage?.content ?? []);
+const directory = computed(() => residenceDirectory(user.value, discoveredPosts.value));
 const neighbors = computed(() =>
   directory.value.filter((resident) => resident.id !== user.value?.id),
 );
@@ -96,48 +97,86 @@ function placeName(id: Destination) {
 }
 const storageError = ref("");
 const postsLoading = ref(false);
+const postPageCache = new Map<string, { value: BlogPage; at: number }>();
+const catalogCache = new Map<string, { value: BlogPost[]; at: number }>();
+const CACHE_AGE = 30_000;
+function cached<T>(cache: Map<string, { value: T; at: number }>, key: string) {
+  const entry = cache.get(key);
+  return entry && Date.now() - entry.at < CACHE_AGE ? entry.value : undefined;
+}
+function cacheResult<T>(cache: Map<string, { value: T; at: number }>, key: string, value: T) {
+  cache.delete(key);
+  cache.set(key, { value, at: Date.now() });
+  if (cache.size > 24) cache.delete(cache.keys().next().value!);
+}
+function rememberPosts(items: readonly BlogPost[]) {
+  const knownIds = new Set(discoveredPosts.value.map((post) => post.id));
+  const unseen = items.filter((post) => !knownIds.has(post.id));
+  if (unseen.length) discoveredPosts.value = [...discoveredPosts.value, ...unseen];
+}
 let postsRequest = 0;
 async function loadBlogPosts() {
   const request = ++postsRequest;
-  postsLoading.value = true;
+  const isPublicList = route.name === "blog";
+  const isArticle = route.name === "blog-post";
+  const needsCatalog = route.name === "user-blog" || route.query.view === "home"
+    || (isArticle && !posts.value.some((post) => post.author &&
+      authorSlug(post.author.name) === route.params.authorSlug &&
+      (post.slug || postSlug(post.title)) === route.params.postSlug));
+  if (!isPublicList && !needsCatalog) {
+    postsLoading.value = false;
+    return;
+  }
+  storageError.value = "";
   try {
-    if (route.name === "blog") {
-      const result = await fetchPostPage({
+    if (isPublicList) {
+      const params = {
         search: search.value,
         tag: selectedTag.value,
-        sort: postSort.value === "views" ? "VIEWS" : "LATEST",
+        sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
         page: blogPage.value - 1,
-      });
+      };
+      const key = JSON.stringify(params);
+      const stored = cached(postPageCache, key);
+      postsLoading.value = !stored;
+      const result = stored ?? await fetchPostPage(params);
       if (request !== postsRequest) return;
+      if (!stored) cacheResult(postPageCache, key, result);
       publicPage.value = result;
       posts.value = result.content;
-      storageError.value = "";
+      rememberPosts(result.content);
       return;
     }
     publicPage.value = undefined;
+    const params = {
+      search: route.query.view === "home" ? "" : search.value,
+      category: route.query.view === "home" ? "" : selectedCategory.value,
+      tag: route.query.view === "home" ? "" : selectedTag.value,
+      sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
+    };
+    const key = JSON.stringify([user.value?.id, params]);
+    const stored = cached(catalogCache, key);
+    postsLoading.value = !stored;
     const selectedPost = posts.value.find((post) => post.author &&
       authorSlug(post.author.name) === route.params.authorSlug &&
       (post.slug || postSlug(post.title)) === route.params.postSlug);
-    const params = {
-      search: search.value,
-      category: selectedCategory.value,
-      tag: selectedTag.value,
-      sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
-    };
-    const [publicPosts, ownPosts] = await Promise.all([
-      fetchPosts(params),
-      user.value ? fetchPosts({ ...params, mine: true, sort: undefined }) : [],
-    ]);
-    if (request !== postsRequest) return;
-    posts.value = [
-      ...ownPosts,
-      ...publicPosts.filter((post) => !ownPosts.some((own) => own.id === post.id)),
-    ];
-    if (selectedPost && !posts.value.some((post) => post.id === selectedPost.id)
-      && (selectedPost.visibility !== "PRIVATE" || selectedPost.author?.id === user.value?.id)) {
-      posts.value.push(selectedPost);
+    let result = stored;
+    if (!result) {
+      const [publicPosts, ownPosts] = await Promise.all([
+        fetchPosts({ ...params, size: 50 }),
+        user.value ? fetchPosts({ ...params, mine: true, sort: undefined, size: 50 }) : [],
+      ]);
+      result = [
+        ...ownPosts,
+        ...publicPosts.filter((post) => !ownPosts.some((own) => own.id === post.id)),
+      ];
     }
-    storageError.value = "";
+    if (request !== postsRequest) return;
+    if (!stored) cacheResult(catalogCache, key, result);
+    posts.value = selectedPost && !result.some((post) => post.id === selectedPost.id)
+      && (selectedPost.visibility !== "PRIVATE" || selectedPost.author?.id === user.value?.id)
+      ? [...result, selectedPost] : result;
+    rememberPosts(posts.value);
   } catch (error) {
     if (request !== postsRequest) return;
     storageError.value = error instanceof Error ? error.message : "게시글을 불러오지 못했어요.";
@@ -164,7 +203,47 @@ const selectedTag = computed(() =>
     ? route.query.tag
     : "",
 );
+if (initialPage) cacheResult(postPageCache, JSON.stringify({
+  search: search.value,
+  tag: selectedTag.value,
+  sort: postSort.value === "views" ? "VIEWS" : "LATEST",
+  page: blogPage.value - 1,
+}), initialPage);
 const blogLocations = new Map<string, number>();
+const pendingBlogRestores = new Set<string>();
+function blogScrollStorageKey(path: string) {
+  return `codeiary.blog.scroll.v1:${path}`;
+}
+function saveBlogScroll(path: string, top: number) {
+  blogLocations.set(path, top);
+  try {
+    sessionStorage.setItem(blogScrollStorageKey(path), String(top));
+  } catch {
+    // Scroll restoration still works for this view when storage is unavailable.
+  }
+}
+function readBlogScroll(path: string) {
+  const cached = blogLocations.get(path);
+  if (cached !== undefined) return cached;
+  try {
+    const saved = sessionStorage.getItem(blogScrollStorageKey(path));
+    const top = saved === null ? 0 : Number(saved);
+    return Number.isFinite(top) ? top : 0;
+  } catch {
+    return 0;
+  }
+}
+function rememberBlogScroll(event: Event) {
+  if (!isBlogRoute.value) return;
+  const target = event.target;
+  if (
+    target instanceof HTMLElement &&
+    target.matches(".window-body, .article-body")
+  ) {
+    if (target.scrollTop === 0 && pendingBlogRestores.has(route.fullPath)) return;
+    saveBlogScroll(route.fullPath, target.scrollTop);
+  }
+}
 const { isDark: night } = useTheme();
 const canvas = ref<HTMLCanvasElement>();
 const ready = ref(false),
@@ -184,6 +263,45 @@ let city: CityController | undefined;
 let unmounted = false;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let previousFocus: HTMLElement | null = null;
+const CITY_POSITION_KEY = "codeiary.city.position.v1";
+
+function saveCityPosition() {
+  if (!city || district.value !== -1) return;
+  try {
+    if (panel.value) city.returnFromVisit?.();
+    const position = city.getPlayerPosition?.();
+    if (!position) return;
+    localStorage.setItem(
+      CITY_POSITION_KEY,
+      JSON.stringify(position),
+    );
+  } catch {
+    // The city remains usable when browser storage is unavailable.
+  }
+}
+
+function restoreCityPosition() {
+  if (!city || district.value !== -1) return;
+  try {
+    const saved = localStorage.getItem(CITY_POSITION_KEY);
+    if (!saved) return;
+    const position = JSON.parse(saved) as { x?: number; z?: number };
+    if (typeof position.x === "number" && typeof position.z === "number")
+      city.setPlayerPosition?.({ x: position.x, z: position.z });
+  } catch {
+    // Ignore an unavailable or malformed saved position.
+  }
+}
+
+function cityVisibilityChanged() {
+  if (document.visibilityState === "hidden") {
+    releaseKeys();
+    city?.setPaused(true);
+  } else if (!panel.value) {
+    city?.setPaused(searchOpen.value);
+    requestAnimationFrame(restoreCityPosition);
+  }
+}
 
 const projects = [
   {
@@ -279,7 +397,7 @@ const blogScope = computed(() =>
 );
 let initialLoad = true;
 watch(
-  () => [user.value?.id, route.fullPath],
+  [() => user.value?.id, () => route.fullPath],
   () => {
     if (import.meta.env.SSR) return;
     if (initialLoad && initialPage) {
@@ -314,7 +432,11 @@ const article = shallowRef<BlogPost | null>(null);
 const articleLoading = ref(false);
 let articleRequest = 0;
 watch(
-  () => [route.params.authorSlug, route.params.postSlug, posts.value],
+  () => [
+    route.params.authorSlug,
+    route.params.postSlug,
+    posts.value,
+  ],
   async () => {
     const request = ++articleRequest;
     articleLoading.value = false;
@@ -342,18 +464,47 @@ watch(
 );
 const canDeleteArticle = computed(() => Boolean(user.value && isOwnBlog.value && article.value?.author?.id === user.value.id));
 const blogNotFound = computed(
-  () =>
-    isBlogRoute.value &&
-    ((Boolean(route.params.authorSlug) && !blogOwner.value) ||
-      (Boolean(route.params.postSlug) && !article.value && !articleLoading.value && !postsLoading.value)),
+  () => {
+    if (
+      !isBlogRoute.value ||
+      postsLoading.value ||
+      articleLoading.value ||
+      storageError.value
+    )
+      return false;
+
+    return Boolean(route.params.authorSlug) &&
+      (!blogOwner.value || (Boolean(route.params.postSlug) && !article.value));
+  },
 );
-function restoreBlogScroll(top = 0) {
-  nextTick(() =>
-    dialog.value
-      ?.querySelector<HTMLElement>(".window-body, .article-body")
-      ?.scrollTo({ top }),
-  );
+function restoreBlogScroll(top = 0, path = route.fullPath) {
+  if (top > 0) pendingBlogRestores.add(path);
+  nextTick(() => {
+    const scroller = dialog.value?.querySelector<HTMLElement>(
+      ".window-body, .article-body",
+    );
+    if (!scroller) return;
+    const restoreWhenScrollable = (frame = 0) => {
+      if (!scroller.isConnected || route.fullPath !== path) return;
+      const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+      if (top <= maxScroll || frame >= 120) {
+        scroller.scrollTop = Math.min(top, Math.max(0, maxScroll));
+        pendingBlogRestores.delete(path);
+        return;
+      }
+      requestAnimationFrame(() => restoreWhenScrollable(frame + 1));
+    };
+    restoreWhenScrollable();
+  });
 }
+watch(
+  article,
+  (post) => {
+    if (post && route.params.postSlug)
+      restoreBlogScroll(readBlogScroll(route.fullPath), route.fullPath);
+  },
+  { flush: "post" },
+);
 function blogRouteTarget(target: Exclude<RouteLocationRaw, string>) {
   return router.push({
     ...target,
@@ -448,6 +599,9 @@ async function deleteCurrentPost() {
   deleteError.value = "";
   try {
     await removePost(post.id);
+    postPageCache.clear();
+    catalogCache.clear();
+    discoveredPosts.value = discoveredPosts.value.filter((known) => known.id !== post.id);
     deleteConfirmationOpen.value = false;
     await selectBlogScope("mine");
   } catch (error) {
@@ -472,6 +626,8 @@ async function continueEditing() {
 watch(
   () => user.value?.id,
   (_userId, previousUserId) => {
+    postPageCache.clear();
+    catalogCache.clear();
     blogLocations.clear();
     if (!user.value && panel.value === "home" && !visitingResident.value)
       void closePanel();
@@ -485,13 +641,13 @@ watch(
     deleteConfirmationOpen.value = false;
     deleteError.value = "";
     if (previous && router.resolve(previous).meta.blog) {
-      blogLocations.set(
-        previous,
-        dialog.value?.querySelector(".window-body, .article-body")?.scrollTop ??
-          0,
+      const scroller = dialog.value?.querySelector<HTMLElement>(
+        ".window-body, .article-body",
       );
+      if (!(pendingBlogRestores.has(previous) && scroller?.scrollTop === 0))
+        saveBlogScroll(previous, scroller?.scrollTop ?? 0);
     }
-    const scrollTop = blogLocations.get(path) ?? 0;
+    const scrollTop = readBlogScroll(path);
     const view = route.query.view;
     const previousPanel = panel.value;
     const nextPanel = isBlogRoute.value
@@ -501,6 +657,10 @@ watch(
           (view === "home" && (user.value || visitingResident.value))
         ? view
         : null;
+    if (previousPanel && !nextPanel) {
+      city?.returnFromVisit?.();
+      saveCityPosition();
+    }
     if (!previousPanel && nextPanel && typeof document !== "undefined")
       previousFocus = document.activeElement as HTMLElement;
     panel.value = nextPanel;
@@ -511,9 +671,8 @@ watch(
       if (nextPanel) {
         if (nextPanel !== previousPanel)
           dialog.value?.focus({ preventScroll: true });
-        restoreBlogScroll(scrollTop);
+        restoreBlogScroll(scrollTop, path);
       } else {
-        blogLocations.clear();
         previousFocus?.focus();
       }
     });
@@ -585,7 +744,10 @@ async function visitResidence(resident: Residence) {
 }
 watch(visibleBlocks, syncNeighborhood);
 watch(neighbors, () => {
-  city?.goToDistrict(-1);
+  if (district.value >= neighborhood.pageCount.value) {
+    void moveDistrict(-1);
+    return;
+  }
   syncNeighborhood();
 });
 watch([user, ownHouseLevel], () =>
@@ -604,6 +766,7 @@ function visit(id: Destination) {
     return;
   }
   if (!city) return;
+  saveCityPosition();
   if (!city.visit(id)) notify("방향키로 입구에 가까이 이동해 주세요.");
 }
 function openPanel(id: Destination) {
@@ -617,8 +780,14 @@ function closePanel() {
 }
 function home() {
   closePanel();
+  city?.returnFromVisit?.();
   void moveDistrict(-1);
   city?.resetCamera();
+  try {
+    localStorage.removeItem(CITY_POSITION_KEY);
+  } catch {
+    // Resetting the map does not depend on browser storage.
+  }
 }
 function keyDown(event: KeyboardEvent) {
   if (searchOpen.value) return;
@@ -680,13 +849,16 @@ function keyDown(event: KeyboardEvent) {
   if (
     (event.key === "Enter" || event.key.toLowerCase() === "e") &&
     event.target === canvas.value
-  )
+  ) {
+    saveCityPosition();
     city?.interact();
+  }
 }
 function keyUp(event: KeyboardEvent) {
   city?.setInput(event.key, false);
 }
 function releaseKeys() {
+  saveCityPosition();
   city?.setJoystick({ x: 0, z: 0 });
   city?.setRunning(false);
   for (const key of [
@@ -704,17 +876,15 @@ function releaseKeys() {
 }
 watch(night, (value) => city?.setNight(value));
 watch([panel, searchOpen], ([value, searching]) =>
-  city?.setPaused(Boolean(value) || searching),
+  city?.setPaused(Boolean(value) || searching || document.visibilityState === "hidden"),
 );
-onMounted(async () => {
-  if (bootstrap) bootstrap.url = "";
-  if (route.query.access === "denied") notify("관리자만 접근할 수 있어요.");
-  window.addEventListener("keydown", keyDown);
-  window.addEventListener("keyup", keyUp);
-  window.addEventListener("blur", releaseKeys);
+let initializingCity = false;
+async function initializeCity() {
+  if (city || initializingCity || unmounted || panel.value) return;
+  initializingCity = true;
   try {
     const { createCity } = await import("@/utils/city/world");
-    if (unmounted) return;
+    if (unmounted || panel.value) return;
     city = createCity(canvas.value!, {
       labels: (p) => {
         labels.value = p;
@@ -738,23 +908,42 @@ onMounted(async () => {
         district.value = value;
       },
     });
-    city.setPaused(Boolean(panel.value));
+    city.setPaused(Boolean(panel.value) || document.visibilityState === "hidden");
     city.setNight(night.value);
     city.setHome(user.value ? ownHouseLevel.value : null);
     syncNeighborhood();
+    restoreCityPosition();
   } catch (reason) {
     if (unmounted) return;
     error.value = true;
     console.error("3D city initialization failed:", reason);
+  } finally {
+    initializingCity = false;
   }
+}
+watch(panel, (value) => {
+  if (!value) void initializeCity();
+});
+onMounted(() => {
+  if (bootstrap) bootstrap.url = "";
+  if (route.query.access === "denied") notify("관리자만 접근할 수 있어요.");
+  window.addEventListener("keydown", keyDown);
+  window.addEventListener("keyup", keyUp);
+  window.addEventListener("blur", releaseKeys);
+  window.addEventListener("pagehide", releaseKeys);
+  document.addEventListener("visibilitychange", cityVisibilityChanged);
+  if (!panel.value) void initializeCity();
 });
 onBeforeUnmount(() => {
   unmounted = true;
+  saveCityPosition();
   city?.dispose();
   clearTimeout(toastTimer);
   window.removeEventListener("keydown", keyDown);
   window.removeEventListener("keyup", keyUp);
   window.removeEventListener("blur", releaseKeys);
+  window.removeEventListener("pagehide", releaseKeys);
+  document.removeEventListener("visibilitychange", cityVisibilityChanged);
 });
 </script>
 
@@ -771,14 +960,12 @@ onBeforeUnmount(() => {
       aria-label="Codeiary 3D 도시"
       :inert="Boolean(panel)"
     >
-      <div class="sky-haze"></div>
       <canvas
         ref="canvas"
         class="city-canvas"
         tabindex="0"
         aria-label="3D 동네. 방향키 또는 WASD로 이동하고, 건물을 클릭하거나 입구로 걸어가면 콘텐츠가 열립니다."
       ></canvas>
-      <div class="board-grain"></div>
       <h1 class="visually-hidden">Code Diary</h1>
       <CityLabels
         v-if="ready && district < 0"
@@ -855,12 +1042,12 @@ onBeforeUnmount(() => {
         @click.self="closePanel"
       >
         <section
-          ref="dialog"
-          class="content-window"
-          :class="panel"
-          role="dialog"
-          aria-modal="true"
-          :aria-label="
+        ref="dialog"
+        class="content-window"
+        :class="panel"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="
             panel === 'home'
               ? `${displayName(homeProfile.owner)}의 집`
               : placeName(panel)
@@ -961,7 +1148,11 @@ onBeforeUnmount(() => {
                 </button>
               </div>
             </div>
-            <div v-else-if="article" class="article-body">
+            <div
+              v-else-if="article"
+              class="article-body"
+              @scroll.passive="rememberBlogScroll"
+            >
               <PostArticle
                 :key="article.id"
                 :post="article"
@@ -994,7 +1185,11 @@ onBeforeUnmount(() => {
               </PostArticle>
               <PostComments :key="commentPostKey(article)" :post="article" />
             </div>
-            <div v-else-if="!route.params.postSlug" class="window-body blog-body">
+            <div
+              v-else-if="!route.params.postSlug"
+              class="window-body blog-body"
+              @scroll.passive="rememberBlogScroll"
+            >
               <header class="window-heading blog-list-heading">
                 <span class="section-kicker">01 / BLOG HOUSE</span>
                 <div v-if="isOwnBlog || contentAction === 'blog'" class="blog-list-heading-actions">

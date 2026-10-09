@@ -79,6 +79,13 @@ async function render() {
 function titles(wrapper: VueWrapper) {
   return wrapper.findAll(".post-card h3").map((card) => card.text());
 }
+async function searchFor(wrapper: VueWrapper, value: string) {
+  await wrapper.get('input[aria-label="블로그 글 검색"]').setValue(value);
+  await vi.waitFor(() => {
+    expect(wrapper.vm.$router.currentRoute.value.query.q).toBe(value);
+  });
+  await flushPromises();
+}
 
 describe("블로그 글 목록", () => {
   beforeEach(() => {
@@ -108,7 +115,10 @@ describe("블로그 글 목록", () => {
     mockAccountProgress[1] = { level: 5, activityPoints: null };
     mockAccountProgress[2] = { level: 1, activityPoints: null };
     try {
-      await render();
+      const wrapper = await render();
+      expect(setHome).not.toHaveBeenCalled();
+      await wrapper.vm.$router.push("/");
+      await flushPromises();
       expect(setHome).toHaveBeenLastCalledWith(null);
       user.value = userFixture("USER");
       await flushPromises();
@@ -216,8 +226,7 @@ describe("블로그 글 목록", () => {
     const wrapper = await render();
     await wrapper.vm.$router.push("/blog?page=2");
     await flushPromises();
-    await wrapper.get('input[aria-label="블로그 글 검색"]').setValue("Vue");
-    await flushPromises();
+    await searchFor(wrapper, "Vue");
     expect(wrapper.vm.$router.currentRoute.value.query).toEqual({ q: "Vue" });
     await wrapper.vm.$router.push("/blog?q=Vue&page=2");
     await flushPromises();
@@ -234,16 +243,11 @@ describe("블로그 글 목록", () => {
 
   it("전체 글을 검색하고 결과가 없으면 검색어를 초기화할 수 있다.", async () => {
     const wrapper = await render();
-    await wrapper.get('input[aria-label="블로그 글 검색"]').setValue("  vue  ");
-    await flushPromises();
+    await searchFor(wrapper, "  vue  ");
     expect(titles(wrapper)).toHaveLength(3);
-    await wrapper
-      .get('input[aria-label="블로그 글 검색"]')
-      .setValue("다른 사람");
-    await flushPromises();
+    await searchFor(wrapper, "다른 사람");
     expect(titles(wrapper)).toEqual(["다른 사람의 글"]);
-    await wrapper.get('input[aria-label="블로그 글 검색"]').setValue("없는 글");
-    await flushPromises();
+    await searchFor(wrapper, "없는 글");
     expect(wrapper.get(".blog-empty-state").text()).toContain(
       "찾는 이야기가 아직 없어요",
     );
@@ -257,10 +261,7 @@ describe("블로그 글 목록", () => {
     const wrapper = await render();
     await wrapper.findAll(".post-sort button")[1]!.trigger("click");
     await flushPromises();
-    await wrapper
-      .get('input[aria-label="블로그 글 검색"]')
-      .setValue("다른 사람");
-    await flushPromises();
+    await searchFor(wrapper, "다른 사람");
     await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
     await flushPromises();
     expect(wrapper.find(".search-input").exists()).toBe(true);
@@ -399,12 +400,10 @@ describe("블로그 글 목록", () => {
       "프론트엔드",
     );
     expect(titles(wrapper)).toEqual(["나의 비공개 글"]);
-    await wrapper.get(".search-input input").setValue("typescript");
-    await flushPromises();
+    await searchFor(wrapper, "typescript");
     expect(titles(wrapper)).toEqual(["나의 비공개 글"]);
     expect(categories()).toEqual(["전체2", "개발 기록1", "프론트엔드1"]);
-    await wrapper.get(".search-input input").setValue("없는 글");
-    await flushPromises();
+    await searchFor(wrapper, "없는 글");
     expect(titles(wrapper)).toEqual([]);
     expect(categories()).toEqual(["전체2", "개발 기록1", "프론트엔드1"]);
     await wrapper.get(".clear-blog-search").trigger("click");

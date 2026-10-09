@@ -60,6 +60,12 @@ export function useNeighborhood(directory: ComputedRef<Residence[]>) {
     page.value = index;
     return true;
   }
+  function prefetchAdjacent(index: number) {
+    if (index < 0) return;
+    void ensureBlock(index - 1);
+    void ensureBlock(index + 1);
+  }
+  watch(page, prefetchAdjacent);
   watch(
     directory,
     () => {
@@ -67,8 +73,12 @@ export function useNeighborhood(directory: ComputedRef<Residence[]>) {
       requests.clear();
       pending.value = 0;
       cache.value = new Map();
-      page.value = -1;
       error.value = "";
+      if (page.value >= pageCount.value) page.value = -1;
+      if (page.value >= 0) {
+        void ensureBlock(page.value);
+        prefetchAdjacent(page.value);
+      }
     },
     { immediate: true },
   );

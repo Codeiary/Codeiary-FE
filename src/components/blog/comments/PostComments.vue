@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { auth } from "@/store/auth";
 import { useComments } from "@/composables/useComments";
-import { commentPostKey, type BlogComment } from "@/utils/blog/comments";
+import type { Comment } from "@/utils/blog/comments";
 import type { BlogPost } from "@/utils/blog/posts";
 import CommentComposer from "./CommentComposer.vue";
 import CommentItem from "./CommentItem.vue";
@@ -11,7 +11,7 @@ import CommentItem from "./CommentItem.vue";
 const props = defineProps<{ post: Pick<BlogPost, "id" | "author"> }>();
 const route = useRoute();
 const { user } = auth;
-const postKey = computed(() => commentPostKey(props.post));
+const postId = computed(() => props.post.id);
 const {
   threads,
   count,
@@ -23,30 +23,30 @@ const {
   add,
   edit,
   remove,
-} = useComments(postKey);
+} = useComments(postId);
 const action = ref<{
   kind: "reply" | "edit" | "delete";
-  comment: BlogComment;
+  comment: Comment;
 } | null>(null);
 const composerVersion = ref(0);
 const announcement = ref("");
-watch([postKey, () => user.value?.id], () => {
+watch([postId, () => user.value?.id], () => {
   action.value = null;
   composerVersion.value++;
   error.value = "";
   announcement.value = "";
 });
-function begin(kind: "reply" | "edit" | "delete", comment: BlogComment) {
+function begin(kind: "reply" | "edit" | "delete", comment: Comment) {
   error.value = "";
   action.value = { kind, comment };
 }
 async function submitRoot(content: string) {
   const actor = user.value?.id;
-  const key = postKey.value;
+  const id = postId.value;
   if (
     (await add(content)) &&
     actor === user.value?.id &&
-    key === postKey.value
+    id === postId.value
   ) {
     composerVersion.value++;
     announcement.value = "댓글을 등록했어요.";
@@ -96,7 +96,7 @@ async function submitAction(content?: string) {
     <template v-else>
       <CommentComposer
         v-if="user"
-        :key="`${user.id}-${postKey}-${composerVersion}`"
+        :key="`${user.id}-${postId}-${composerVersion}`"
         :busy="busy"
         @submit="submitRoot"
       />

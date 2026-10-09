@@ -209,7 +209,7 @@ describe("유저 집과 지연 로딩", () => {
     },
   );
 
-  it("구역을 요청할 때만 불러오고 재방문 시 캐시를 사용할 수 있다.", async () => {
+  it("현재 구역의 양옆을 미리 불러오고 재방문 시 캐시를 사용할 수 있다.", async () => {
     const request = vi.spyOn(service, "fetchNeighborhoodBlock");
     const scope = effectScope();
     const directory = computed(() => service.residenceDirectory(null, []));
@@ -218,17 +218,20 @@ describe("유저 집과 지연 로딩", () => {
       await flushPromises();
       expect(request).not.toHaveBeenCalled();
       await neighborhood.goToPage(0);
-      expect(request).toHaveBeenCalledTimes(1);
+      await flushPromises();
+      expect(request.mock.calls.map((call) => call[1])).toEqual([0, 1]);
       expect(neighborhood.visibleBlocks.value[0]?.residents).toHaveLength(10);
       await neighborhood.goToPage(1);
+      await flushPromises();
       await neighborhood.goToPage(0);
-      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls.map((call) => call[1])).toEqual([0, 1, 2]);
       await neighborhood.goToPage(3);
+      await flushPromises();
       expect(
-        neighborhood.visibleBlocks.value.map((block) => block.page),
-      ).toEqual([3]);
+        neighborhood.visibleBlocks.value.map((block) => block.page).sort(),
+      ).toEqual([2, 3, 4]);
       expect(await neighborhood.goToPage(999)).toBe(false);
-      expect(request).toHaveBeenCalledTimes(3);
+      expect(request.mock.calls.map((call) => call[1])).toEqual([0, 1, 2, 3, 4]);
     } finally {
       scope.stop();
     }
