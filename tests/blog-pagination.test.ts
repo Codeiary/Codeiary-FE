@@ -1,8 +1,11 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
+import { routeLocationKey } from "vue-router";
 import BlogPostList from "@/components/blog/BlogPostList.vue";
 import BlogPagination from "@/components/blog/BlogPagination.vue";
 import { postFixture } from "./fixtures/blog";
+
+const global = { provide: { [routeLocationKey as symbol]: { path: "/blog", query: {} } } };
 
 describe("블로그 페이지네이션", () => {
   it("글을 12개씩 나누어 중복 없이 마지막 페이지까지 볼 수 있다.", async () => {
@@ -10,6 +13,7 @@ describe("블로그 페이지네이션", () => {
       postFixture({ id: index + 1, title: `기록 ${index + 1}` }),
     );
     const wrapper = mount(BlogPostList, {
+      global,
       props: {
         posts, personal: false, own: false,
         search: "", category: "", tag: "", sort: "latest", page: 1,
@@ -19,7 +23,7 @@ describe("블로그 페이지네이션", () => {
       const titles = () => wrapper.findAll(".post-card h3").map((card) => card.text());
       const first = titles();
       expect(first).toHaveLength(12);
-      expect(wrapper.get('[aria-label="이전 페이지"]').attributes("disabled")).toBeDefined();
+      expect(wrapper.get('[aria-label="이전 페이지"]').attributes("aria-disabled")).toBe("true");
       await wrapper.get('[aria-label="2페이지"]').trigger("click");
       expect(wrapper.emitted("update:page")).toEqual([[2]]);
       await wrapper.setProps({ page: 2 });
@@ -29,7 +33,7 @@ describe("블로그 페이지네이션", () => {
       const last = titles();
       expect(last).toEqual(["기록 3", "기록 2", "기록 1"]);
       expect(new Set([...first, ...second, ...last]).size).toBe(27);
-      expect(wrapper.get('[aria-label="다음 페이지"]').attributes("disabled")).toBeDefined();
+      expect(wrapper.get('[aria-label="다음 페이지"]').attributes("aria-disabled")).toBe("true");
       await wrapper.setProps({ search: "기록 27" });
       expect(titles()).toEqual(["기록 27"]);
       expect(wrapper.get('[aria-current="page"]').text()).toBe("1");
@@ -42,7 +46,7 @@ describe("블로그 페이지네이션", () => {
   });
 
   it("페이지가 많아도 현재 위치와 마지막 페이지를 확인하고 이동할 수 있다.", async () => {
-    const wrapper = mount(BlogPagination, { props: { page: 1, pageCount: 234 } });
+    const wrapper = mount(BlogPagination, { global, props: { page: 1, pageCount: 234 } });
     try {
       expect(wrapper.text().replace(/\s/g, "")).toBe("12345…234");
       await wrapper.get('[aria-label="234페이지"]').trigger("click");
@@ -50,6 +54,26 @@ describe("블로그 페이지네이션", () => {
       await wrapper.setProps({ page: 120 });
       expect(wrapper.text().replace(/\s/g, "")).toBe("1…119120121…234");
       expect(wrapper.get('[aria-current="page"]').text()).toBe("120");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("API 페이지를 다시 자르지 않고 전체 페이지 수와 주소를 표시할 수 있다.", async () => {
+    const wrapper = mount(BlogPostList, {
+      global,
+      props: {
+        posts: [postFixture()], totalPages: 234, personal: false, own: false,
+        search: "", category: "", tag: "", sort: "latest", page: 9,
+      },
+    });
+    try {
+      expect(wrapper.findAll(".post-card")).toHaveLength(1);
+      expect(wrapper.get('[aria-label="234페이지"]').attributes("href")).toBe("/blog?page=234");
+      expect(wrapper.get('[aria-label="1페이지"]').attributes("href")).toBe("/blog");
+      expect(wrapper.get('[aria-current="page"]').text()).toBe("9");
+      await wrapper.get('[aria-label="10페이지"]').trigger("click", { ctrlKey: true });
+      expect(wrapper.emitted("update:page")).toBeUndefined();
     } finally {
       wrapper.unmount();
     }

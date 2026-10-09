@@ -4,17 +4,25 @@ import Icon from "@/components/Icon.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
 import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
+import { authorSlug, postSlug } from "@/utils/blog/slug";
 
 defineProps<{ post: BlogPost; compact?: boolean }>();
-defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
+const emit = defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
+
+function openPost(event: MouseEvent, id: number) {
+  if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  emit("open", id);
+}
 </script>
 
 <template>
   <article class="post-card" :class="{ 'post-card-compact': compact }">
-    <button
+    <a
       class="post-open"
+      :href="post.author ? `/blog/${encodeURIComponent(authorSlug(post.author.name))}/${encodeURIComponent(post.slug || postSlug(post.title))}` : undefined"
       :aria-label="`${post.title} 글 보기`"
-      @click="$emit('open', post.id)"
+      @click="openPost($event, post.id)"
     >
       <div class="post-art">
         <CoverImage :src="post.coverImage" :author-id="post.author?.id">
@@ -47,7 +55,7 @@ defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
           </span>
         </div>
       </div>
-    </button>
+    </a>
     <div v-if="!compact" class="post-card-details">
       <div class="post-author-line">
         <button
@@ -78,6 +86,11 @@ defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
 </template>
 
 <style scoped>
+.post-open {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
 .post-card.post-card-compact {
   border: 0;
   border-bottom: 1px solid var(--theme-border);

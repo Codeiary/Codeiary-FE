@@ -16,6 +16,13 @@ const blogApiMock = vi.hoisted(() => ({
 }));
 
 vi.mock("@/services/blog-api", () => ({
+  fetchPostPage: async ({ page, search, sort }: { page: number; search?: string; sort?: string }) => {
+    const { filterPosts } = await import("@/utils/blog/post-collection");
+    const posts = filterPosts(blogApiMock.posts.filter((post) => post.visibility !== "PRIVATE"), {
+      search: search ?? "", category: "", tag: "", sort: sort === "VIEWS" ? "views" : "latest",
+    });
+    return { content: posts.slice(page * 12, (page + 1) * 12), page, totalPages: Math.ceil(posts.length / 12), totalElements: posts.length };
+  },
   fetchPosts: async ({ mine }: { mine?: boolean } = {}) =>
     blogApiMock.posts.filter((post) =>
       mine

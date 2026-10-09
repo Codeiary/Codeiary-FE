@@ -1,7 +1,8 @@
 import { createAuthApi } from "@/services/auth-api";
 import { auth } from "@/store/auth";
 import { postSlug } from "@/utils/blog/slug";
-import type { BlogAuthor, BlogPost, PostVisibility } from "@/utils/blog/posts";
+import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
+import { BLOG_PAGE_SIZE, type BlogPage } from "@/utils/blog/page";
 
 interface ApiAuthor { id: number; nickname?: string | null; profileImageUrl?: string | null }
 interface ApiPost {
@@ -15,6 +16,17 @@ interface ApiPost {
   viewCount: number;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface ApiPostPage {
+  content: ApiPost[];
+  page: number;
+  totalPages: number;
+  totalElements: number;
+}
+
+export function mapPostPage(page: ApiPostPage): BlogPage {
+  return { ...page, content: page.content.filter((post) => post.publicPost).map(mapPost) };
 }
 
 const api = createAuthApi();
@@ -33,7 +45,7 @@ export function mapPost(post: ApiPost): BlogPost {
     category: post.category,
     title: post.title,
     description: content.replace(/[#*`>$|_~]/g, "").replace(/\s+/g, " ").trim().slice(0, 150),
-    date: new Date(post.createdAt).toLocaleDateString("sv-SE").replace(/-/g, "."),
+    date: new Date(post.createdAt).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }).replace(/-/g, "."),
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     viewCount: post.viewCount ?? 0,
@@ -62,6 +74,10 @@ export async function fetchPosts(params: { mine?: boolean; search?: string; cate
     ? await auth.authorizedRequest<{ content: ApiPost[] }>(path)
     : await api.request<{ content: ApiPost[] }>(path);
   return response.content.map(mapPost);
+}
+
+export async function fetchPostPage(params: { search?: string; sort?: "LATEST" | "VIEWS"; page: number }) {
+  return mapPostPage(await api.request<ApiPostPage>(`/posts${query({ ...params, size: BLOG_PAGE_SIZE })}`));
 }
 
 export async function fetchPost(id: number) {

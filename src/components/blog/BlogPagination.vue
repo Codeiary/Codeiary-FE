@@ -1,9 +1,29 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute } from "vue-router";
 import Icon from "@/components/Icon.vue";
 
 const props = defineProps<{ page: number; pageCount: number }>();
-defineEmits<{ select: [page: number] }>();
+const emit = defineEmits<{ select: [page: number] }>();
+const route = useRoute();
+
+function pageHref(page: number) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(route.query)) {
+    if (key === "page") continue;
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (typeof item === "string") query.append(key, item);
+    }
+  }
+  if (page > 1) query.set("page", String(page));
+  return `${route.path}${query.size ? `?${query}` : ""}`;
+}
+
+function select(event: MouseEvent, page: number) {
+  if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (page >= 1 && page <= props.pageCount && page !== props.page) emit("select", page);
+}
 
 const items = computed(() => {
   const total = props.pageCount;
@@ -17,31 +37,34 @@ const items = computed(() => {
 
 <template>
   <nav class="blog-pagination" aria-label="게시글 페이지">
-    <button
+    <a
       class="pagination-direction pagination-previous"
       aria-label="이전 페이지"
-      :disabled="page <= 1"
-      @click="$emit('select', page - 1)"
+      :href="page > 1 ? pageHref(page - 1) : undefined"
+      :aria-disabled="page <= 1 || undefined"
+      @click="select($event, page - 1)"
     >
       <Icon name="chevron" :size="16" />
-    </button>
+    </a>
     <template v-for="item in items" :key="item">
-      <button
+      <a
         v-if="typeof item === 'number'"
         :aria-label="`${item}페이지`"
         :aria-current="item === page ? 'page' : undefined"
-        @click="item !== page && $emit('select', item)"
-      >{{ item }}</button>
+        :href="pageHref(item)"
+        @click="select($event, item)"
+      >{{ item }}</a>
       <span v-else class="pagination-ellipsis" aria-hidden="true">…</span>
     </template>
-    <button
+    <a
       class="pagination-direction"
       aria-label="다음 페이지"
-      :disabled="page >= pageCount"
-      @click="$emit('select', page + 1)"
+      :href="page < pageCount ? pageHref(page + 1) : undefined"
+      :aria-disabled="page >= pageCount || undefined"
+      @click="select($event, page + 1)"
     >
       <Icon name="chevron" :size="16" />
-    </button>
+    </a>
   </nav>
 </template>
 
@@ -55,7 +78,7 @@ const items = computed(() => {
   padding-block: 8px 12px;
   font-size: var(--font-size-min);
 }
-.blog-pagination button,
+.blog-pagination a,
 .pagination-ellipsis {
   display: grid;
   place-items: center;
@@ -65,17 +88,18 @@ const items = computed(() => {
   border-radius: 9px;
   color: var(--theme-muted);
   font-variant-numeric: tabular-nums;
+  text-decoration: none;
 }
-.blog-pagination button:hover:not(:disabled) {
+.blog-pagination a[href]:hover {
   background: var(--theme-raised);
   color: var(--theme-text);
 }
-.blog-pagination button[aria-current="page"] {
+.blog-pagination a[aria-current="page"] {
   background: var(--theme-raised);
   color: var(--theme-text);
   font-weight: 650;
 }
-.blog-pagination button:disabled {
+.blog-pagination a[aria-disabled="true"] {
   opacity: 0.3;
   cursor: default;
 }
