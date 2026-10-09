@@ -311,11 +311,13 @@ const scopedPosts = computed(() =>
   }),
 );
 const article = shallowRef<BlogPost | null>(null);
+const articleLoading = ref(false);
 let articleRequest = 0;
 watch(
   () => [route.params.authorSlug, route.params.postSlug, posts.value],
   async () => {
     const request = ++articleRequest;
+    articleLoading.value = false;
     article.value = null;
     if (!route.params.postSlug) return;
     const candidate = scopedPosts.value.find(
@@ -326,13 +328,14 @@ watch(
         (post.slug || postSlug(post.title)) === route.params.postSlug,
     );
     if (!candidate) return;
-    // Keep the clicked list item visible while the full article request runs.
-    article.value = candidate;
+    articleLoading.value = true;
     try {
       const completePost = await fetchPost(candidate.id);
       if (request === articleRequest) article.value = completePost;
     } catch {
-      // The list item remains available if the detail request fails.
+      if (request === articleRequest) article.value = candidate;
+    } finally {
+      if (request === articleRequest) articleLoading.value = false;
     }
   },
   { immediate: true },
@@ -342,7 +345,7 @@ const blogNotFound = computed(
   () =>
     isBlogRoute.value &&
     ((Boolean(route.params.authorSlug) && !blogOwner.value) ||
-      (Boolean(route.params.postSlug) && !article.value && !postsLoading.value)),
+      (Boolean(route.params.postSlug) && !article.value && !articleLoading.value && !postsLoading.value)),
 );
 function restoreBlogScroll(top = 0) {
   nextTick(() =>
@@ -991,7 +994,7 @@ onBeforeUnmount(() => {
               </PostArticle>
               <PostComments :key="commentPostKey(article)" :post="article" />
             </div>
-            <div v-else class="window-body blog-body">
+            <div v-else-if="!route.params.postSlug" class="window-body blog-body">
               <header class="window-heading">
                 <div>
                   <span class="section-kicker">01 / BLOG HOUSE</span>
