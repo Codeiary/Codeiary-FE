@@ -15,7 +15,7 @@ import SiteHeader from "@/components/SiteHeader.vue";
 import ContentActions from "@/components/ContentActions.vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import { auth } from "@/store/auth";
-import { demoPosts, type BlogAuthor, type BlogPost } from "@/utils/blog/posts";
+import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 import { authorSlug, postSlug } from "@/utils/blog/slug";
 import BlogPostList from "@/components/blog/BlogPostList.vue";
 import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
@@ -23,7 +23,7 @@ import PostArticle from "@/components/blog/PostArticle.vue";
 import PostComments from "@/components/blog/comments/PostComments.vue";
 import { commentPostKey } from "@/utils/blog/comments";
 import { editPost } from "@/services/blog-storage";
-import { deletePost, loadLocalPosts, localPosts } from "@/store/blog";
+import { fetchPost, fetchPosts, removePost } from "@/services/blog-api";
 import UserHome from "@/components/profile/UserHome.vue";
 import {
   createMockHome,
@@ -47,7 +47,7 @@ import MobileRunButton from "@/components/city/MobileRunButton.vue";
 const route = useRoute();
 const router = useRouter();
 const { user } = auth;
-const posts = computed(() => [...demoPosts, ...localPosts.value]);
+const posts = shallowRef<BlogPost[]>([]);
 const directory = computed(() => residenceDirectory(user.value, posts.value));
 const neighbors = computed(() =>
   directory.value.filter((resident) => resident.id !== user.value?.id),
@@ -90,26 +90,20 @@ function placeName(id: Destination) {
   return id === "home" ? `${displayName(user.value)}의 집` : places[id].name;
 }
 const storageError = ref("");
-watch(
-  () => user.value?.id,
-  async (_id, _old, onCleanup) => {
-    let stale = false;
-    onCleanup(() => {
-      stale = true;
+async function loadBlogPosts() {
+  try {
+    posts.value = await fetchPosts({
+      mine: blogScope.value === "mine",
+      search: search.value,
+      category: selectedCategory.value,
+      sort: postSort.value === "views" ? "VIEWS" : "LATEST",
     });
-    try {
-      await loadLocalPosts();
-      if (!stale) {
-        storageError.value = "";
-      }
-    } catch {
-      if (!stale)
-        storageError.value =
-          "저장한 글을 불러오지 못했어요. 새로고침 후 다시 확인해 주세요.";
-    }
-  },
-  { immediate: true },
-);
+    storageError.value = "";
+  } catch (error) {
+    storageError.value = error instanceof Error ? error.message : "게시글을 불러오지 못했어요.";
+    posts.value = [];
+  }
+}
 const isBlogRoute = computed(() => route.meta.blog === true);
 const postSort = computed(() =>
   !route.params.authorSlug && route.query.sort === "views" ? "views" : "latest",
@@ -245,6 +239,16 @@ const isOwnBlog = computed(() =>
 const blogScope = computed(() =>
   !route.params.authorSlug ? "all" : isOwnBlog.value ? "mine" : "author",
 );
+watch(
+  () => [user.value?.id, route.fullPath],
+  async (_id, _old, onCleanup) => {
+    let stale = false;
+    onCleanup(() => { stale = true; });
+    await loadBlogPosts();
+    if (stale) return;
+  },
+  { immediate: true },
+);
 const blogTitle = computed(() =>
   blogOwner.value
     ? `${displayName(blogOwner.value)}의 블로그`
@@ -264,26 +268,29 @@ const scopedPosts = computed(() =>
     );
   }),
 );
-const article = computed(() =>
-  scopedPosts.value.find(
-    (post) =>
-      post.author &&
-      (authorSlug(post.author.name) === route.params.authorSlug ||
-        String(post.author.id) === route.params.authorSlug) &&
-      (post.slug || postSlug(post.title)) === route.params.postSlug,
-  ),
-);
-const canDeleteArticle = computed(() =>
-  Boolean(
-    user.value &&
-    isOwnBlog.value &&
-    article.value?.author?.id === user.value.id &&
-    localPosts.value.some(
+const article = shallowRef<BlogPost | null>(null);
+watch(
+  () => [route.params.authorSlug, route.params.postSlug, posts.value],
+  async () => {
+    article.value = null;
+    if (!route.params.postSlug) return;
+    const candidate = scopedPosts.value.find(
       (post) =>
-        post.id === article.value?.id && post.author?.id === user.value?.id,
-    ),
-  ),
+        post.author &&
+        (authorSlug(post.author.name) === route.params.authorSlug ||
+          String(post.author.id) === route.params.authorSlug) &&
+        (post.slug || postSlug(post.title)) === route.params.postSlug,
+    );
+    if (!candidate) return;
+    try {
+      article.value = await fetchPost(candidate.id);
+    } catch {
+      article.value = candidate;
+    }
+  },
+  { immediate: true },
 );
+const canDeleteArticle = computed(() => Boolean(user.value && isOwnBlog.value && article.value?.author?.id === user.value.id));
 const blogNotFound = computed(
   () =>
     isBlogRoute.value &&
@@ -390,7 +397,7 @@ async function deleteCurrentPost() {
   }
   deleteError.value = "";
   try {
-    await deletePost(post.id, owner.id);
+    await removePost(post.id);
     deleteConfirmationOpen.value = false;
     await selectBlogScope("mine");
   } catch (error) {

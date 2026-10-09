@@ -1,6 +1,5 @@
 import { openDB, type DBSchema } from "idb";
 import type { BlogAuthor, BlogPost, PostVisibility } from "@/utils/blog/posts";
-import { postSlug } from "@/utils/blog/slug";
 import type {
   ImageLayouts,
   ImageSize,
@@ -30,7 +29,6 @@ interface BlogImage {
 }
 interface BlogDatabase extends DBSchema {
   drafts: { key: string; value: BlogDraft; indexes: { authorId: number } };
-  posts: { key: number; value: BlogPost };
   images: { key: string; value: BlogImage; indexes: { draftId: string } };
   imageSizes: {
     key: string;
@@ -38,8 +36,7 @@ interface BlogDatabase extends DBSchema {
   };
 }
 
-// Frontend mock repository. Images and drafts survive reloads on this browser;
-// no API requests or credentials are stored here.
+// Only unsent drafts and editor images live in IndexedDB. Published posts use the API.
 function database() {
   return openDB<BlogDatabase>("codeiary.blog.mock.v1", 2, {
     upgrade(db, oldVersion) {
@@ -48,7 +45,6 @@ function database() {
           "authorId",
           "authorId",
         );
-        db.createObjectStore("posts", { keyPath: "id", autoIncrement: true });
         db.createObjectStore("images", { keyPath: "id" }).createIndex(
           "draftId",
           "draftId",
@@ -57,14 +53,6 @@ function database() {
       if (oldVersion < 2) db.createObjectStore("imageSizes", { keyPath: "id" });
     },
   });
-}
-export async function readPosts() {
-  const db = await database();
-  try {
-    return await db.getAll("posts");
-  } finally {
-    db.close();
-  }
 }
 export function createDraft(author: BlogAuthor & { id: number }): BlogDraft {
   const now = new Date().toISOString();
@@ -114,67 +102,12 @@ export async function saveDraft(draft: BlogDraft) {
     db.close();
   }
 }
-export async function publishDraft(draft: BlogDraft): Promise<BlogPost> {
-  if (!draft.category.trim()) throw new Error("카테고리를 하나 입력해 주세요.");
-  if (!draft.title.trim() || !draft.content.trim())
-    throw new Error("제목과 본문을 작성해 주세요.");
+export async function deleteDraft(id: string, authorId: number) {
   const db = await database();
   try {
-    const tx = db.transaction(["drafts", "posts"], "readwrite");
-    const stored = await tx.objectStore("drafts").get(draft.id);
-    if (!stored || stored.authorId !== draft.authorId)
-      throw new Error("저장한 초안을 찾을 수 없어요.");
-    const previous = draft.postId
-      ? await tx.objectStore("posts").get(draft.postId)
-      : undefined;
-    if (draft.postId && previous?.author?.id !== draft.authorId)
-      throw new Error("게시글에 접근할 수 없어요.");
-    const all = await tx.objectStore("posts").getAll();
-    const base = postSlug(draft.title);
-    let slug = previous?.slug ?? base;
-    let suffix = 2;
-    while (
-      all.some(
-        (post) =>
-          post.id !== previous?.id &&
-          post.author?.id === draft.authorId &&
-          post.slug === slug,
-      )
-    )
-      slug = `${base}-${suffix++}`;
-    const now = new Date().toISOString();
-    const createdAt = previous?.createdAt ?? now;
-    const post: BlogPost = {
-      // Keep mock IDs separate from the bundled demo IDs.
-      id:
-        previous?.id ?? Math.max(Date.now(), ...all.map((post) => post.id + 1)),
-      author: { ...draft.author },
-      status: "PUBLISHED",
-      category: draft.category.trim(),
-      title: draft.title.trim(),
-      content: draft.content,
-      tags: [...draft.tags],
-      imageLayouts: draft.imageLayouts ?? {},
-      coverImage: draft.coverImage,
-      visibility: draft.visibility ?? "PUBLIC",
-      slug,
-      description: draft.content
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-        .replace(/[#*`>$|_~]/g, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 150),
-      date: new Date(createdAt).toLocaleDateString("sv-SE").replace(/-/g, "."),
-      createdAt,
-      updatedAt: now,
-      viewCount: previous?.viewCount ?? 0,
-      art: "code",
-    };
-    await tx.objectStore("posts").put(post);
-    await tx.objectStore("drafts").delete(draft.id);
-    await tx.done;
-    return post;
+    const draft = await db.get("drafts", id);
+    if (draft?.authorId !== authorId) return;
+    await db.delete("drafts", id);
   } finally {
     db.close();
   }
@@ -204,19 +137,6 @@ export async function editPost(post: BlogPost, authorId: number) {
   };
   await saveDraft(draft);
   return draft;
-}
-export async function deletePost(postId: number, authorId: number) {
-  const db = await database();
-  try {
-    const tx = db.transaction("posts", "readwrite");
-    const post = await tx.store.get(postId);
-    if (!post || post.author?.id !== authorId)
-      throw new Error("삭제할 수 없는 게시글이에요.");
-    await tx.store.delete(postId);
-    await tx.done;
-  } finally {
-    db.close();
-  }
 }
 export async function addImage(file: File, draft: BlogDraft) {
   if (

@@ -18,15 +18,16 @@ import MarkdownEditor from "@/components/blog/MarkdownEditor.vue";
 import PostArticle from "@/components/blog/PostArticle.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
 import { auth } from "@/store/auth";
-import { authorSlug } from "@/utils/blog/slug";
+import { authorSlug, postSlug } from "@/utils/blog/slug";
 import {
   addImage,
   createDraft,
+  deleteDraft,
   readDraft,
   saveDraft,
   type BlogDraft,
 } from "@/services/blog-storage";
-import { loadLocalPosts, localPosts, publishDraft } from "@/store/blog";
+import { createPost, updatePost } from "@/services/blog-api";
 import type { EditorAction } from "@/utils/blog/editor-commands";
 import {
   normalizeImageLayout,
@@ -130,7 +131,6 @@ const previewPost = computed(() => ({
   tags: draft.tags,
   author: draft.author,
   date:
-    localPosts.value.find((post) => post.id === draft.postId)?.date ??
     new Date().toLocaleDateString("sv-SE").replace(/-/g, "."),
   content: draft.content,
   visibility: draft.visibility,
@@ -446,13 +446,29 @@ async function publish() {
   publishing.value = true;
   try {
     await persist(false);
-    const post = await publishDraft(snapshot());
+    const data = snapshot();
+    const post = data.postId
+      ? await updatePost(data.postId, {
+          title: data.title,
+          content: data.content,
+          category: data.category,
+          representativeImageUrl: data.coverImage ?? null,
+          publicPost: data.visibility !== "PRIVATE",
+        })
+      : await createPost({
+          title: data.title,
+          content: data.content,
+          category: data.category,
+          representativeImageUrl: data.coverImage ?? null,
+          publicPost: data.visibility !== "PRIVATE",
+      });
+    await deleteDraft(draft.id, draft.authorId);
     complete = true;
     await router.replace({
       name: "blog-post",
       params: {
-        authorSlug: authorSlug(draft.author.name),
-        postSlug: post.slug,
+        authorSlug: authorSlug(post.author?.name || draft.author.name),
+        postSlug: post.slug || postSlug(post.title),
       },
       state: { blogPrevious: null },
     });
@@ -517,7 +533,6 @@ onMounted(async () => {
       const saved = await readDraft(route.params.draftId, owner.id);
       if (!saved) throw new Error("이 계정의 작성 내용을 찾을 수 없어요.");
       Object.assign(draft, saved);
-      if (draft.postId) await loadLocalPosts();
     }
     await nextTick();
   } catch (reason) {
