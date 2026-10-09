@@ -11,6 +11,7 @@ interface ApiPost {
   title: string;
   content?: string;
   category: string;
+  tags?: string[];
   representativeImageUrl?: string | null;
   publicPost: boolean;
   viewCount: number;
@@ -50,7 +51,7 @@ export function mapPost(post: ApiPost): BlogPost {
     updatedAt: post.updatedAt,
     viewCount: post.viewCount ?? 0,
     art: "code",
-    tags: [],
+    tags: post.tags ?? [],
     content: post.content,
     slug: postSlug(post.title),
     coverImage: post.representativeImageUrl ?? undefined,
@@ -58,17 +59,18 @@ export function mapPost(post: ApiPost): BlogPost {
   };
 }
 
-function query(params: { search?: string; category?: string; sort?: "LATEST" | "VIEWS"; page?: number; size?: number }) {
+function query(params: { search?: string; category?: string; tag?: string; sort?: "LATEST" | "VIEWS"; page?: number; size?: number }) {
   const values = new URLSearchParams();
   if (params.search) values.set("search", params.search);
   if (params.category) values.set("category", params.category);
+  if (params.tag) values.set("tag", params.tag);
   if (params.sort) values.set("sort", params.sort);
   values.set("page", String(params.page ?? 0));
   values.set("size", String(params.size ?? 100));
   return `?${values}`;
 }
 
-export async function fetchPosts(params: { mine?: boolean; search?: string; category?: string; sort?: "LATEST" | "VIEWS"; page?: number; size?: number } = {}) {
+export async function fetchPosts(params: { mine?: boolean; search?: string; category?: string; tag?: string; sort?: "LATEST" | "VIEWS"; page?: number; size?: number } = {}) {
   const path = `${params.mine ? "/posts/mine" : "/posts"}${query(params)}`;
   const response = params.mine
     ? await auth.authorizedRequest<{ content: ApiPost[] }>(path)
@@ -76,7 +78,7 @@ export async function fetchPosts(params: { mine?: boolean; search?: string; cate
   return response.content.map(mapPost);
 }
 
-export async function fetchPostPage(params: { search?: string; sort?: "LATEST" | "VIEWS"; page: number }) {
+export async function fetchPostPage(params: { search?: string; tag?: string; sort?: "LATEST" | "VIEWS"; page: number }) {
   return mapPostPage(await api.request<ApiPostPage>(`/posts${query({ ...params, size: BLOG_PAGE_SIZE })}`));
 }
 
@@ -88,6 +90,7 @@ export interface PostInput {
   title: string;
   content: string;
   category: string;
+  tags: string[];
   representativeImageUrl?: string | null;
   publicPost: boolean;
 }

@@ -22,6 +22,7 @@ export async function render(url: string, apiBaseUrl: string, requestFetch = fet
     size: String(BLOG_PAGE_SIZE),
     sort: location.searchParams.get("sort") === "views" ? "VIEWS" : "LATEST",
     ...(location.searchParams.get("q") ? { search: location.searchParams.get("q")! } : {}),
+    ...(location.searchParams.get("tag") ? { tag: location.searchParams.get("tag")! } : {}),
   }).toString();
   // Public HTML never forwards session cookies or requests private posts.
   const response = await requestFetch(endpoint, {

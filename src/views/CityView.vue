@@ -104,6 +104,7 @@ async function loadBlogPosts() {
     if (route.name === "blog") {
       const result = await fetchPostPage({
         search: search.value,
+        tag: selectedTag.value,
         sort: postSort.value === "views" ? "VIEWS" : "LATEST",
         page: blogPage.value - 1,
       });
@@ -120,6 +121,7 @@ async function loadBlogPosts() {
     const params = {
       search: search.value,
       category: selectedCategory.value,
+      tag: selectedTag.value,
       sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
     };
     const [publicPosts, ownPosts] = await Promise.all([
