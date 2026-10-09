@@ -8,6 +8,7 @@ function pageResponse(title = "서버에서 받은 공개 글") {
       id: 1, author: { id: 2, nickname: "기록자" }, title, category: "개발",
       publicPost: true, viewCount: 10, createdAt: "2026-10-09T00:00:00Z",
       representativeImageUrl: "https://img.codeiary.com/cover.jpg",
+      tags: ["java", "spring"],
     }], page: 0, totalPages: 3, totalElements: 25,
   });
 }
@@ -35,6 +36,14 @@ describe("블로그 첫 페이지 SSR", { timeout: 15_000 }, () => {
     expect(page.state).toBe("");
     expect(page.robots).toBe("noindex, nofollow");
     expect(page.head).toContain('href="https://codeiary.com/blog?page=2"');
+  });
+
+  it("태그 필터를 API로 전달하고 태그를 초기 데이터에 포함할 수 있다.", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(pageResponse());
+    const page = await render("/blog?tag=spring", "http://localhost:8080/api", request);
+    expect(new URL(String(request.mock.calls[0]![0])).searchParams.get("tag")).toBe("spring");
+    expect(page.state).toContain('"tags":["java","spring"]');
+    expect(page.robots).toBe("noindex, nofollow");
   });
 
   it("동시 요청의 데이터를 분리하고 스크립트 문자열을 안전하게 전달할 수 있다.", async () => {
