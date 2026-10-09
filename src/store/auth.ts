@@ -46,7 +46,6 @@ export function createAuthSession(
     try {
       const storage = options.storage ? options.storage() : window.sessionStorage;
       storage?.removeItem("codeiary.session");
-      storage?.removeItem("codeiary.oauth.mock.tokens");
     } catch {
       // Authentication uses browser cookies even when Web Storage is unavailable.
     }
@@ -246,7 +245,10 @@ export function createAuthSession(
       uploadUrl = new URL(result.uploadUrl);
       imageUrl = new URL(result.imageUrl);
       headers = new Headers(result.headers);
-      if ([uploadUrl, imageUrl].some((url) => url.protocol !== "https:" || url.username || url.password || url.hash)
+      const allowedUrl = (url: URL) => url.protocol === "https:"
+        || (import.meta.env.DEV && url.origin === "http://localhost:9090"
+          && url.pathname.startsWith("/codeiary-local/"));
+      if ([uploadUrl, imageUrl].some((url) => !allowedUrl(url) || url.username || url.password || url.hash)
           || ["Authorization", "Cookie", "Content-Length", "Host"].some((name) => headers.has(name))
           || headers.get("Content-Type") !== file.type)
         throw new Error("Invalid upload response");
@@ -335,10 +337,4 @@ export function createAuthSession(
   };
 }
 
-export const auth = createAuthSession({
-  fetch:
-    import.meta.env.DEV && import.meta.env.VITE_AUTH_MOCK !== "false"
-      ? async (input, init) =>
-          (await import("@/services/mock-oauth")).mockOAuthFetch(input, init)
-      : undefined,
-});
+export const auth = createAuthSession();

@@ -29,7 +29,10 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     session = createAuthSession({ fetch: fetchMock, storage: () => storage });
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
 
   async function login() {
     fetchMock.mockResolvedValueOnce(jsonResponse(userFixture()));
@@ -49,7 +52,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
 
   it("OAuth 완료 후 사용자를 조회하고 저장 토큰을 삭제할 수 있다.", async () => {
     storage.setItem("codeiary.session", JSON.stringify({ refreshToken: "legacy" }));
-    storage.setItem("codeiary.oauth.mock.tokens", "legacy-mock-tokens");
     const save = vi.spyOn(storage, "setItem");
 
     await login();
@@ -59,7 +61,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     expect(fetchMock.mock.calls[0]![1]?.body).toBeUndefined();
     expect(session.user.value).toEqual(userFixture());
     expect(storage.getItem("codeiary.session")).toBeNull();
-    expect(storage.getItem("codeiary.oauth.mock.tokens")).toBeNull();
     expect(save).not.toHaveBeenCalled();
     expectCookieRequests();
   });
@@ -300,6 +301,8 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
   });
 
   it.each([
+    { reason: "로컬 저장소와 다른 포트", patch: { uploadUrl: "http://localhost:8080/codeiary-local/photo.jpg" } },
+    { reason: "로컬 저장소와 다른 버킷", patch: { imageUrl: "http://localhost:9090/other/photo.jpg" } },
     { reason: "HTTPS가 아닌 주소", patch: { uploadUrl: "http://example.com/photo.jpg" } },
     { reason: "만료된 주소", patch: { expiresAt: new Date(0).toISOString() } },
     { reason: "파일 형식과 다른 헤더", patch: { headers: { "Content-Type": "image/png" } } },
@@ -327,6 +330,24 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
 
     expect(requestsTo("/auth/reissue")).toHaveLength(0);
     expect(session.user.value).toEqual(userFixture());
+  });
+
+  it.each([true, false])("개발 모드(%s)에 따라 로컬 S3 업로드를 제한할 수 있다.", async (development) => {
+    vi.stubEnv("DEV", development);
+    await login();
+    const result = {
+      ...presignedUpload(),
+      uploadUrl: "http://localhost:9090/codeiary-local/photo.jpg?signature=local",
+      imageUrl: "http://localhost:9090/codeiary-local/photo.jpg",
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(result)).mockResolvedValueOnce(new Response(null));
+    const upload = session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" }));
+    if (development) {
+      await expect(upload).resolves.toEqual({ profileImageUrl: result.imageUrl });
+    } else {
+      await expect(upload).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    }
   });
 
   it.each(["주소 발급", "파일 전송"])("%s 중 로그아웃하면 업로드 결과를 사용하지 않을 수 있다.", async (stage) => {

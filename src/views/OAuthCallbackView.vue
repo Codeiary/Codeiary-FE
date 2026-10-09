@@ -3,24 +3,20 @@ import { onMounted, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import AuthLayout from "@/layouts/AuthLayout.vue";
 import { auth } from "@/store/auth";
-import { consumeOAuthAttempt, oauthMockEnabled } from "@/utils/auth/oauth";
+import { consumeOAuthAttempt } from "@/utils/auth/oauth";
 import { loginDestination } from "@/router/auth-guard";
 const route = useRoute();
 const router = useRouter();
 const error = ref("");
 const redirect = ref("/");
 onMounted(async () => {
-  const { preview, error: providerError } = route.query;
+  const { error: providerError } = route.query;
   // The server has already completed OAuth; only the app session is restored here.
   history.replaceState(history.state, "", "/auth/callback");
   try {
     redirect.value = consumeOAuthAttempt();
     if (providerError)
       throw new Error("Google 로그인이 취소되었어요. 다시 시도해 주세요.");
-    if (import.meta.env.DEV && oauthMockEnabled && preview === "1") {
-      const { startMockOAuthSession } = await import("@/services/mock-oauth");
-      startMockOAuthSession();
-    }
     await auth.completeOAuthLogin();
     await router.replace(
       auth.needsOnboarding.value
