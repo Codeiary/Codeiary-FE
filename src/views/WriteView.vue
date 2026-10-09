@@ -23,6 +23,7 @@ import {
   addImage,
   createDraft,
   deleteDraft,
+  readImageFile,
   readDraft,
   saveDraft,
   type BlogDraft,
@@ -447,21 +448,40 @@ async function publish() {
   try {
     await persist(false);
     const data = snapshot();
+    const attachmentSources = [
+      ...new Set([
+        ...(data.content.match(/attachment:[a-f0-9-]{36}/g) ?? []),
+        ...(data.coverImage?.startsWith("attachment:") ? [data.coverImage] : []),
+      ]),
+    ];
+    const uploadedImages = new Map<string, string>();
+    for (const source of attachmentSources) {
+      const file = await readImageFile(source, draft.authorId);
+      if (!file) throw new Error("첨부 이미지를 찾을 수 없어요. 이미지를 다시 추가해 주세요.");
+      uploadedImages.set(source, await auth.uploadBlogImage(file));
+    }
+    const content = [...uploadedImages].reduce(
+      (value, [source, url]) => value.split(source).join(url),
+      data.content,
+    );
+    const representativeImageUrl = data.coverImage
+      ? uploadedImages.get(data.coverImage) ?? data.coverImage
+      : null;
     const post = data.postId
       ? await updatePost(data.postId, {
           title: data.title,
-          content: data.content,
+          content,
           category: data.category,
           tags: data.tags,
-          representativeImageUrl: data.coverImage ?? null,
+          representativeImageUrl,
           publicPost: data.visibility !== "PRIVATE",
         })
       : await createPost({
           title: data.title,
-          content: data.content,
+          content,
           category: data.category,
           tags: data.tags,
-          representativeImageUrl: data.coverImage ?? null,
+          representativeImageUrl,
           publicPost: data.visibility !== "PRIVATE",
       });
     await deleteDraft(draft.id, draft.authorId);
@@ -908,7 +928,7 @@ onBeforeUnmount(() => {
       ref="fileInput"
       class="writer-sr-only"
       type="file"
-      accept="image/png,image/jpeg,image/webp,image/gif"
+      accept="image/png,image/jpeg"
       multiple
       tabindex="-1"
       aria-label="업로드할 이미지"
@@ -918,7 +938,7 @@ onBeforeUnmount(() => {
       ref="coverInput"
       class="writer-sr-only"
       type="file"
-      accept="image/png,image/jpeg,image/webp,image/gif"
+      accept="image/png,image/jpeg"
       tabindex="-1"
       aria-label="업로드할 대표 이미지"
       @change="chooseCover"

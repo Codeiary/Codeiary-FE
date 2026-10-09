@@ -212,12 +212,12 @@ export function createAuthSession(
     acceptProfile(profile);
   }
 
-  async function uploadProfileImage(file: File): Promise<{ profileImageUrl: string }> {
+  async function uploadImage(file: File, maxBytes: number, allowedTypes: string[]) {
     const currentRevision = revision;
     requireCurrentSession(currentRevision);
-    if (file.type !== "image/jpeg" || !file.size)
+    if (!allowedTypes.includes(file.type) || !file.size)
       throw new AuthError(400, "INVALID_IMAGE", "사진을 읽을 수 없어요. 다른 이미지를 선택해 주세요.");
-    if (file.size > 1024 * 1024)
+    if (file.size > maxBytes)
       throw new AuthError(413, "PAYLOAD_TOO_LARGE", "사진 용량이 너무 커요. 다른 이미지를 선택해 주세요.");
 
     const result = await authorizedRequest<{
@@ -272,7 +272,7 @@ export function createAuthSession(
       requireCurrentSession(currentRevision);
       if (!response.ok)
         throw new AuthError(response.status, "IMAGE_UPLOAD_FAILED", "사진을 업로드하지 못했어요. 다시 시도해 주세요.");
-      return { profileImageUrl: imageUrl.href };
+      return imageUrl.href;
     } catch (error) {
       requireCurrentSession(currentRevision);
       if (error instanceof AuthError) throw error;
@@ -282,6 +282,14 @@ export function createAuthSession(
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async function uploadProfileImage(file: File): Promise<{ profileImageUrl: string }> {
+    return { profileImageUrl: await uploadImage(file, 1024 * 1024, ["image/jpeg"]) };
+  }
+
+  function uploadBlogImage(file: File): Promise<string> {
+    return uploadImage(file, 5 * 1024 * 1024, ["image/jpeg", "image/png"]);
   }
 
   function logout(): Promise<void> {
@@ -329,6 +337,7 @@ export function createAuthSession(
     completeOnboarding,
     updateProfile,
     uploadProfileImage,
+    uploadBlogImage,
     needsOnboarding: computed(() => user.value?.onboardingCompleted === false),
     logout,
     verifyAdmin,
