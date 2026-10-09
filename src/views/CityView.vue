@@ -786,19 +786,6 @@ onBeforeUnmount(() => {
           <kbd class="wide-key">↵</kbd><span>입장</span>
         </div>
       </div>
-      <div class="world-signature">
-        <strong>기여</strong>
-        <a
-          class="contributor-link"
-          href="https://github.com/dnjstjt1297"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="기여자 김원석의 GitHub 프로필 (새 탭)"
-        >
-          <Icon name="github" :size="17" /><span>김원석</span
-          ><Icon name="arrow" :size="12" />
-        </a>
-      </div>
       <MobileRunButton
         :disabled="!ready || error || Boolean(panel) || searchOpen"
         @change="city?.setRunning($event)"
