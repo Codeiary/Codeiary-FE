@@ -19,7 +19,7 @@ const modelValue = defineModel<string>({ required: true });
       ><input
         v-model="modelValue"
         type="search"
-        placeholder="제목, 내용 검색"
+        placeholder="제목, 카테고리, 태그 검색"
         aria-label="블로그 글 검색" /><button
         v-if="modelValue"
         class="clear-blog-search"

@@ -15,12 +15,12 @@
 .blog-my-posts {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-shrink: 0;
-  min-height: 36px;
-  padding: 7px 10px;
+  min-height: 30px;
+  padding: 5px 8px;
   border: 1px solid var(--theme-border);
-  border-radius: 7px;
+  border-radius: 6px;
   background: var(--theme-raised);
   color: var(--theme-text);
   font-size: var(--font-size-min);
@@ -31,6 +31,29 @@
     color 0.2s;
 }
 .blog-my-posts:hover {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+}
+.blog-home-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-raised);
+  color: var(--theme-text);
+  font-size: var(--font-size-min);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.blog-home-button > svg {
+  width: 14px;
+  height: 14px;
+}
+.blog-home-button:hover {
   border-color: var(--theme-accent);
   color: var(--theme-accent);
 }
@@ -134,6 +157,22 @@
 }
 .content-window > .window-body.blog-body {
   padding-bottom: 28px;
+}
+.blog-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.blog-list-heading .section-kicker {
+  margin-bottom: 0;
+}
+.blog-list-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 .blog .blog-filter {
   align-items: center;
@@ -530,9 +569,27 @@
   .blog-filter .content-actions {
     gap: 4px;
   }
+  .content-window.blog .blog-list-heading .blog-home-button {
+    width: 30px;
+    min-height: 30px;
+    padding: 0;
+  }
+  .content-window.blog .blog-list-heading .blog-my-posts {
+    width: 30px;
+    min-height: 30px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+  .content-window.blog .blog-list-heading .blog-my-posts > span {
+    display: none;
+  }
+  .content-window.blog .blog-list-heading .blog-home-button > span {
+    display: none;
+  }
   .blog-filter .content-actions .blog-my-posts {
-    width: 36px;
-    min-height: 36px;
+    width: 30px;
+    min-height: 30px;
     padding: 0;
     justify-content: center;
     gap: 0;

@@ -140,9 +140,9 @@ export async function editPost(post: BlogPost, authorId: number) {
 }
 export async function addImage(file: File, draft: BlogDraft) {
   if (
-    !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)
+    !["image/jpeg", "image/png"].includes(file.type)
   )
-    throw new Error("PNG, JPG, WebP, GIF 이미지를 선택해 주세요.");
+    throw new Error("PNG 또는 JPG 이미지를 선택해 주세요.");
   if (file.size > 5 * 1024 * 1024)
     throw new Error("이미지는 한 장당 5MB까지 추가할 수 있어요.");
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -242,6 +242,20 @@ export async function resolveImages(
       }),
     );
     return Object.fromEntries(entries);
+  } finally {
+    db.close();
+  }
+}
+
+export async function readImageFile(src: string, authorId: number): Promise<File | undefined> {
+  if (!src.startsWith("attachment:")) return undefined;
+  const db = await database();
+  try {
+    const image = await db.get("images", src.slice("attachment:".length));
+    if (!image || image.authorId !== authorId) return undefined;
+    const response = await fetch(image.dataUrl);
+    const blob = await response.blob();
+    return new File([blob], "image", { type: blob.type });
   } finally {
     db.close();
   }
