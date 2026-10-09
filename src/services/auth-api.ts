@@ -44,6 +44,9 @@ export function createAuthApi(
           INVALID_IMAGE: "사진을 읽을 수 없어요. 다른 이미지를 선택해 주세요.",
           IMAGE_UPLOAD_UNAVAILABLE: "사진 업로드를 준비 중이에요. 잠시 후 다시 시도해 주세요.",
           IMAGE_UPLOAD_FAILED: "사진을 저장하지 못했어요. 다시 시도해 주세요.",
+          COMMENT_NOT_FOUND: "댓글을 찾을 수 없어요. 새로고침해 주세요.",
+          COMMENT_ACCESS_DENIED: "내가 작성한 댓글만 수정하거나 삭제할 수 있어요.",
+          COMMENT_REPLY_NOT_ALLOWED: "답글을 남길 수 없는 댓글이에요. 새로고침해 주세요.",
         };
         const message = messages[code] ?? (
           response.status === 401 ? expiredMessage

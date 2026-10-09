@@ -1,23 +1,21 @@
 import {
   computed,
   onBeforeUnmount,
-  onMounted,
   ref,
   shallowRef,
   watch,
   type Ref,
 } from "vue";
-import { auth } from "@/store/auth";
 import {
   createComment,
   deleteComment,
   readComments,
   updateComment,
-} from "@/services/comment-storage";
-import { commentThreads, type BlogComment } from "@/utils/blog/comments";
+} from "@/services/comment-api";
+import { commentThreads, type Comment } from "@/utils/blog/comments";
 
-export function useComments(postKey: Ref<string>) {
-  const comments = shallowRef<BlogComment[]>([]);
+export function useComments(postId: Ref<number>) {
+  const comments = shallowRef<Comment[]>([]);
   const loading = ref(true);
   const busy = ref(false);
   const error = ref("");
@@ -26,11 +24,11 @@ export function useComments(postKey: Ref<string>) {
   let disposed = false;
   async function reload() {
     const version = ++generation;
-    const key = postKey.value;
+    const id = postId.value;
     loading.value = true;
     loadError.value = "";
     try {
-      const result = await readComments(key);
+      const result = await readComments(id);
       if (!disposed && version === generation) comments.value = result;
     } catch {
       if (!disposed && version === generation)
@@ -40,7 +38,7 @@ export function useComments(postKey: Ref<string>) {
     }
   }
   watch(
-    postKey,
+    postId,
     () => {
       comments.value = [];
       error.value = "";
@@ -66,14 +64,9 @@ export function useComments(postKey: Ref<string>) {
       busy.value = false;
     }
   }
-  const refresh = () => {
-    if (!busy.value) void reload();
-  };
-  onMounted(() => window.addEventListener("focus", refresh));
   onBeforeUnmount(() => {
     disposed = true;
     generation++;
-    window.removeEventListener("focus", refresh);
   });
   return {
     threads: computed(() => commentThreads(comments.value)),
@@ -85,13 +78,11 @@ export function useComments(postKey: Ref<string>) {
     error,
     loadError,
     reload,
-    add: (content: string, parentId: string | null = null) =>
-      mutate(() =>
-        createComment(postKey.value, auth.user.value, content, parentId),
-      ),
-    edit: (id: string, content: string) =>
-      mutate(() => updateComment(postKey.value, id, auth.user.value, content)),
-    remove: (id: string) =>
-      mutate(() => deleteComment(postKey.value, id, auth.user.value)),
+    add: (content: string, parentId: number | null = null) =>
+      mutate(() => createComment(postId.value, content, parentId)),
+    edit: (id: number, content: string) =>
+      mutate(() => updateComment(postId.value, id, content)),
+    remove: (id: number) =>
+      mutate(() => deleteComment(postId.value, id)),
   };
 }

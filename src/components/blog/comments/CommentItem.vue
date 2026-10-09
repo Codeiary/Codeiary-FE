@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { BlogComment } from "@/utils/blog/comments";
+import type { Comment } from "@/utils/blog/comments";
 import { displayName } from "@/utils/profile/display-name";
 import CommentAvatar from "./CommentAvatar.vue";
 defineProps<{
-  comment: BlogComment;
+  comment: Comment;
   viewerId?: number;
   postAuthorId?: number | string;
   busy?: boolean;
