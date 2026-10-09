@@ -840,7 +840,6 @@ onBeforeUnmount(() => {
             :active="panel"
             @home="home"
             @navigate="openPanel"
-            @close="closePanel"
           />
           <ContentActions
             v-if="panel !== 'blog' || article || blogNotFound"

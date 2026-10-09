@@ -363,7 +363,7 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     await wrapper.findAll(".post-open")[1]!.trigger("click");
     await flushPromises();
-    await wrapper.get(".content-exit").trigger("click");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await flushPromises();
     await wrapper
       .findAll(".site-header:not([inert]) nav > button")[0]!

@@ -14,7 +14,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   navigate: [id: Destination];
   home: [];
-  close: [];
 }>();
 const route = useRoute();
 const navigationId = `site-navigation-${useId()}`;
@@ -65,14 +64,6 @@ watch(
       </button>
     </nav>
     <div class="site-header-actions">
-      <button
-        v-if="active"
-        class="content-exit"
-        aria-label="동네로 돌아가기"
-        @click="emit('close')"
-      >
-        동네로 돌아가기
-      </button>
       <div class="header-right"><AccountActions compact /></div>
       <button
         ref="menuButton"
