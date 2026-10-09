@@ -31,8 +31,7 @@ Vue 3와 Three.js로 구현한 도시형 개인 블로그입니다. 화면 전�
 - 상단 메뉴에서도 각 콘텐츠 창을 바로 열 수 있으며, Escape로 닫을 수 있습니다.
 
 블로그 검색·분류, 글 상세 보기, 프로젝트 상세 보기, IT 이슈 상세 보기는
-목업 데이터를 사용하며, 실시간 뉴스 피드는 포함하지 않습니다. Google 로그인은 개발용 목 인증과
-백엔드 OAuth2·쿠키 인증 연결을 지원합니다.
+목업 데이터를 사용하며, 실시간 뉴스 피드는 포함하지 않습니다. Google 로그인은 백엔드 OAuth2·쿠키 인증을 사용합니다.
 
 도시 모델과 간판은 코드로 생성합니다. 외부 3D 모델을 내려받을 필요가 없습니다.
 `src/city/world.ts`는 3D 장면과 조작, `src/city/navigation.ts`는 충돌과 경로 탐색,
@@ -52,16 +51,10 @@ API 요청은 운영 환경에서 같은 오리진의 `/api`를 사용합니다.
 - 내 집의 프로필 수정에서 닉네임·선택 프로필 사진·GitHub 주소·공개 연락 이메일을 설정합니다. 닉네임 입력 중 중복 여부를 표시하며, 중복 또는 확인 실패 상태에서는 저장할 수 없습니다. 본인의 집에서만 편집할 수 있으며, 로그인 이메일은 공개 연락처에 자동으로 넣지 않습니다. 사진 선택 후 미리보기·변경·삭제가 가능하며, 저장을 누르면 사진 업로드 후 프로필을 갱신합니다.
 - 인증 요청은 `credentials: "include"`로 쿠키를 전송합니다. 프론트는 JWT를 읽거나 저장하지 않으며 Authorization 헤더를 만들지 않습니다. 로그인 시작 시 `sessionStorage`에는 안전한 복귀 주소와 시작 시각만 저장합니다. 실제 로그인은 저장소가 차단되어도 진행하고, 복귀 정보가 없으면 홈으로 이동합니다.
 
-### 프론트 미리보기
-
-`npm run dev`에서는 기본적으로 목 응답으로 Google 버튼 → 신규 온보딩 → 로그인 상태를 확인할 수 있습니다. 실제 Google 계정에 연결되지 않습니다. `Codeiary`, `관리자`, `커밋여행자`, `프론트노트`는 중복 닉네임 예시입니다. 작성한 프로필은 이 브라우저에 저장되고, 다음 로그인에는 온보딩을 건너뜁니다. 새 사용자를 다시 확인하려면 개발자 도구에서 `codeiary.oauth.mock.profile` 로컬 저장 항목을 삭제하세요.
-
-목 인증은 토큰 대신 개발용 로그인 여부만 `sessionStorage`에 저장하여 쿠키 API의 응답 계약을 재현합니다. 실제 HttpOnly 쿠키를 구현하는 기능은 아니며 운영 빌드에서는 사용하지 않습니다.
-
 ### 백엔드 연결
 
-`VITE_AUTH_MOCK=false`로 설정합니다. Google 로그인 시작 주소는 기본적으로
-`/oauth2/authorization/google`이며 필요하면 `VITE_GOOGLE_AUTH_URL`로 지정합니다.
+Google 로그인 시작 주소는 기본적으로 `/oauth2/authorization/google`이며 필요하면
+`VITE_GOOGLE_AUTH_URL`로 지정합니다.
 OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은 모두 백엔드가 담당합니다.
 프론트에는 Google 비밀 키나 앱 교환 코드가 필요하지 않습니다.
 
@@ -89,9 +82,9 @@ OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은
 - `POST /api/users/me/onboarding` → `multipart/form-data`의 `nickname`만 받고 온보딩이 완료된 사용자 프로필을 반환합니다. 중복은 `409 / NICKNAME_TAKEN`으로 응답합니다.
 - 선택한 원본은 브라우저에서 256×256 JPEG로 변환하며, 프로필 업로드는 1MiB 이하로 제한합니다.
 - `POST /api/images/presigned-url`에 `{ contentType, contentLength }`를 인증 쿠키와 함께 보내고 `{ uploadUrl, imageUrl, headers, expiresAt }`를 받습니다. 서버의 공통 이미지 계약은 JPG·PNG 10MiB 이하입니다.
+- 로컬 업로드는 백엔드 폴더에서 `docker compose -f compose.local.yaml up -d`로 S3Mock을 실행합니다. 개발 서버에서만 `http://localhost:9090/codeiary-local/` 이미지 주소를 허용하며, 운영 빌드는 HTTPS만 허용합니다.
 - 파일은 발급받은 HTTPS `uploadUrl`에 `PUT`으로 직접 전송합니다. 서버가 지정한 `Content-Type` 등 업로드 헤더만 사용하고 쿠키·Authorization 헤더를 보내지 않습니다. 파일 전송 제한 시간은 60초이며, 실패해도 토큰 재발급이나 자동 재전송을 하지 않습니다.
 - S3 전송 성공 후 CloudFront `imageUrl`을 기존 프로필 수정 요청에 포함합니다. 주소 발급이나 파일 전송만으로 사용자 프로필을 바꾸지 않습니다. S3 CORS에는 프론트 오리진의 `PUT`과 업로드 헤더가 허용되어야 합니다.
-- 개발 목 인증은 `.invalid` 주소 발급과 파일 `PUT`의 두 단계를 재현합니다. 외부 S3에 요청하지 않고 프로필 저장 시 브라우저 안의 이미지 데이터로 바꿔 표시합니다.
 - `PUT /api/users/me/profile` → JSON의 `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`을 저장하고 갱신된 본인 프로필을 반환합니다. 비워 둔 선택 항목은 `null`로 보내 삭제합니다. `PENDING` 계정은 사용할 수 없습니다.
 
 프로필은 `id`, `email`, `name`, `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`, `onboardingCompleted`, `role`을 포함합니다.
