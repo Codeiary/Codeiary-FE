@@ -66,7 +66,18 @@ export function createAuthSession(
     ) {
       throw new AuthError(0, "INVALID_RESPONSE", "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요.");
     }
-    user.value = profile;
+    const current = user.value;
+    if (!current ||
+        current.id !== profile.id ||
+        current.email !== profile.email ||
+        current.name !== profile.name ||
+        current.nickname !== profile.nickname ||
+        current.profileImageUrl !== profile.profileImageUrl ||
+        current.githubUrl !== profile.githubUrl ||
+        current.contactEmail !== profile.contactEmail ||
+        current.onboardingCompleted !== profile.onboardingCompleted ||
+        current.role !== profile.role)
+      user.value = profile;
     notice.value = "";
   }
 

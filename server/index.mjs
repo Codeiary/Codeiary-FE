@@ -31,7 +31,14 @@ app.use((req, res, next) => {
   });
 });
 if (vite) app.use(vite.middlewares);
-else app.use(express.static(path.join(root, "dist/client"), { index: false, dotfiles: "deny" }));
+else app.use(express.static(path.join(root, "dist/client"), {
+  index: false,
+  dotfiles: "deny",
+  setHeaders(res, filePath) {
+    if (filePath.includes(`${path.sep}assets${path.sep}`))
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  },
+}));
 
 app.use(async (req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") return next();

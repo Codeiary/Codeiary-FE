@@ -5,9 +5,12 @@ import { auth } from "@/store/auth";
 
 const route = useRoute();
 const router = useRouter();
+let lastSessionCheck = Date.now();
 
 function checkSession() {
-  if (document.visibilityState === "visible") void auth.revalidate();
+  if (document.visibilityState !== "visible" || Date.now() - lastSessionCheck < 60_000) return;
+  lastSessionCheck = Date.now();
+  void auth.revalidate();
 }
 
 onMounted(() => document.addEventListener("visibilitychange", checkSession));
