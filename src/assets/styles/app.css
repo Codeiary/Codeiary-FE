@@ -172,12 +172,6 @@ svg {
   background: linear-gradient(155deg, #f0ece0 0%, #e6e8da 50%, #d8e3d7 100%);
   transition: background 1s;
 }
-.sky-haze {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at 12% 18%, #fcf4e1a8, transparent 45%);
-  pointer-events: none;
-}
 .city-canvas {
   position: absolute;
   inset: 0;
@@ -191,13 +185,6 @@ svg {
 }
 .city-canvas:active {
   cursor: grabbing;
-}
-.board-grain {
-  position: absolute;
-  inset: 0;
-  opacity: 0.06;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.6' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .explore-button {
   display: inline-flex;
@@ -488,9 +475,6 @@ kbd {
 }
 .is-night .city-board {
   background: linear-gradient(140deg, #253446, #344b55 55%, #426364);
-}
-.is-night .sky-haze {
-  background: radial-gradient(ellipse at 65% 10%, #a6bcb01a, transparent 50%);
 }
 .modal-backdrop {
   position: fixed;
