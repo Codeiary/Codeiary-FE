@@ -80,6 +80,13 @@ export async function fetchPosts(params: { mine?: boolean; search?: string; cate
   return response.content.map(mapPost);
 }
 
+export async function fetchMyPostCount() {
+  const page = await auth.authorizedRequest<ApiPostPage>(
+    `/posts/mine${query({ page: 0, size: 1 })}`,
+  );
+  return page.totalElements;
+}
+
 export async function fetchPostPage(params: { search?: string; tag?: string; sort?: "LATEST" | "LIKES"; page: number }) {
   return mapPostPage(await api.request<ApiPostPage>(`/posts${query({ ...params, size: BLOG_PAGE_SIZE })}`));
 }

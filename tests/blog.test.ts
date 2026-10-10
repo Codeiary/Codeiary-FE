@@ -6,8 +6,7 @@ import CityApp from "@/views/CityView.vue";
 import { auth, type UserProfile } from "@/store/auth";
 import { userFixture } from "./fixtures/auth";
 import { cityRoutes } from "@/router/city-routes";
-import { mockAccountProgress } from "@/services/mock-neighborhood";
-import { blogPostsFixture } from "./fixtures/blog";
+import { blogPostsFixture, postFixture } from "./fixtures/blog";
 
 const setHome = vi.hoisted(() => vi.fn());
 const blogApiMock = vi.hoisted(() => ({
@@ -29,6 +28,7 @@ vi.mock("@/services/blog-api", () => ({
         ? post.author?.id === blogApiMock.userId
         : post.visibility !== "PRIVATE",
     ),
+  fetchMyPostCount: async () => blogApiMock.posts.filter((post) => post.author?.id === blogApiMock.userId).length,
   fetchPost: async (id: number) =>
     blogApiMock.posts.find((post) => post.id === id),
   removePost: vi.fn(),
@@ -111,29 +111,28 @@ describe("블로그 글 목록", () => {
     ]);
   });
 
-  it("로그인과 계정 전환 및 로그아웃에 맞춰 메인 집 레벨을 갱신할 수 있다.", async () => {
-    mockAccountProgress[1] = { level: 5, activityPoints: null };
-    mockAccountProgress[2] = { level: 1, activityPoints: null };
-    try {
-      const wrapper = await render();
-      expect(setHome).not.toHaveBeenCalled();
-      await wrapper.vm.$router.push("/");
-      await flushPromises();
-      expect(setHome).toHaveBeenLastCalledWith(null);
-      user.value = userFixture("USER");
-      await flushPromises();
-      expect(setHome).toHaveBeenLastCalledWith(5);
-      user.value = { ...userFixture("USER"), id: 2 };
-      blogApiMock.userId = 2;
-      await flushPromises();
-      expect(setHome).toHaveBeenLastCalledWith(1);
-      user.value = null;
-      await flushPromises();
-      expect(setHome).toHaveBeenLastCalledWith(null);
-    } finally {
-      delete mockAccountProgress[1];
-      delete mockAccountProgress[2];
-    }
+  it("로그인한 사용자의 게시글 수로 메인 집 레벨을 정할 수 있다.", async () => {
+    blogApiMock.posts = [
+      ...blogPostsFixture(),
+      ...Array.from({ length: 8 }, (_, index) =>
+        postFixture({ id: 10 + index }),
+      ),
+    ];
+    const wrapper = await render();
+    expect(setHome).not.toHaveBeenCalled();
+    await wrapper.vm.$router.push("/");
+    await flushPromises();
+    expect(setHome).toHaveBeenLastCalledWith(null);
+    user.value = userFixture("USER");
+    await flushPromises();
+    expect(setHome).toHaveBeenLastCalledWith(1);
+    user.value = { ...userFixture("USER"), id: 2 };
+    blogApiMock.userId = 2;
+    await flushPromises();
+    expect(setHome).toHaveBeenLastCalledWith(0);
+    user.value = null;
+    await flushPromises();
+    expect(setHome).toHaveBeenLastCalledWith(null);
   });
 
   it("내 블로그에서 본인 글과 비공개 글을 볼 수 있다.", async () => {

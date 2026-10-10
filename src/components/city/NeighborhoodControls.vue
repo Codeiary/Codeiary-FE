@@ -2,12 +2,11 @@
 import { displayName } from "@/utils/profile/display-name";
 import { computed, nextTick, ref } from "vue";
 import Icon from "@/components/Icon.vue";
-import { searchResidences } from "@/services/mock-neighborhood";
+import { searchResidences } from "@/services/neighborhood";
 import { type Residence } from "@/utils/city/residences";
 
 const props = defineProps<{
   directory: Residence[];
-  viewerId?: number;
   page: number;
   pageCount: number;
   loading: boolean;
@@ -118,9 +117,7 @@ function choose(resident: Residence) {
         <span
           ><strong>{{ displayName(resident) }}</strong
           ><small>{{
-            resident.id === viewerId
-              ? "메인 동네의 내 집"
-              : `글 ${resident.postCount}개 · Lv. ${resident.level}`
+            `글 ${resident.postCount}개 · Lv. ${resident.level}`
           }}</small></span
         >
         <Icon name="arrow-right" :size="17" />

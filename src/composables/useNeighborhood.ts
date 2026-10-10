@@ -2,7 +2,7 @@ import { computed, ref, shallowRef, watch, type ComputedRef } from "vue";
 import {
   fetchNeighborhoodBlock,
   type NeighborhoodBlock,
-} from "@/services/mock-neighborhood";
+} from "@/services/neighborhood";
 import {
   HOMES_PER_BLOCK,
   orderedResidences,

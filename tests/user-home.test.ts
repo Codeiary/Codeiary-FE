@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import UserHome from "@/components/profile/UserHome.vue";
 import { auth, AuthError, type UserProfile } from "@/store/auth";
-import { createMockHome, homeBlogPosts } from "@/utils/profile/mock-home";
+import { createHomeProfile, homeBlogPosts, type HomeProfile } from "@/utils/profile/home-profile";
 import { prepareAvatar } from "@/utils/profile/avatar-upload";
 import { deferred, userFixture } from "./fixtures/auth";
 import { blogPostsFixture, postFixture } from "./fixtures/blog";
@@ -39,8 +39,8 @@ afterEach(() => {
   wrappers.splice(0).forEach((wrapper) => wrapper.unmount());
   vi.useRealTimers();
 });
-function render(user = userFixture("USER"), own = true) {
-  const profile = createMockHome(user);
+function render(user = userFixture("USER"), own = true, profileOverride?: HomeProfile) {
+  const profile = profileOverride ?? createHomeProfile(user);
   const wrapper = mount(UserHome, {
     props: {
       profile,
@@ -62,7 +62,7 @@ async function selectPhoto(wrapper: VueWrapper, file = new File(["photo"], "phot
 describe("사용자의 집", () => {
   it("사용자 이름 대신 닉네임을 집과 블로그 이동에 사용할 수 있다.", async () => {
     const wrapper = render();
-    const profile = createMockHome({
+    const profile = createHomeProfile({
       ...userFixture(),
       nickname: "커밋여행자",
     });
@@ -95,8 +95,8 @@ describe("사용자의 집", () => {
     const wrapper = render();
     expect(wrapper.find('a[href^="mailto:"]').exists()).toBe(false);
     expect(wrapper.find('a[href^="https://github.com/"]').exists()).toBe(false);
-    expect(createMockHome(userFixture()).email).toBe("");
-    expect(createMockHome(userFixture()).github).toBe("");
+    expect(createHomeProfile(userFixture()).email).toBe("");
+    expect(createHomeProfile(userFixture()).github).toBe("");
   });
   it("다른 사용자의 비공개 글을 제외하고 내 글을 최신순으로 확인할 수 있다.", () => {
     const author = { id: 1, name: "기록자" };
@@ -121,19 +121,40 @@ describe("사용자의 집", () => {
     });
   });
   it("포트폴리오와 작성한 IT 이슈의 목록과 상세를 확인할 수 있다.", async () => {
-    const wrapper = render();
+    const profile = createHomeProfile(userFixture("USER"));
+    profile.projects = [{
+      id: "codeiary",
+      title: "Codeiary",
+      category: "Web",
+      date: "2026.10.06",
+      description: "블로그 웹사이트",
+      tags: ["Vue"],
+      paragraphs: ["프로젝트 설명"],
+    }];
+    profile.issues = [{
+      id: "browser-rendering",
+      title: "3D 웹의 렌더링은 어디에서 일어날까?",
+      category: "Web Graphics",
+      date: "2026.10.05",
+      description: "브라우저 렌더링",
+      tags: ["WebGL"],
+      paragraphs: ["렌더링 설명"],
+    }];
+    const wrapper = render(userFixture("USER"), true, profile);
     await wrapper.get("#home-tab-portfolio").trigger("click");
-    expect(wrapper.findAll(".home-entry")).toHaveLength(2);
+    expect(wrapper.findAll(".home-entry")).toHaveLength(1);
     await wrapper.findAll(".home-entry")[0]!.trigger("click");
     expect(wrapper.get(".home-entry-detail h3").text()).toBe("Codeiary");
     await wrapper.get(".home-detail-back").trigger("click");
-    expect(wrapper.findAll(".home-entry")).toHaveLength(2);
+    expect(wrapper.findAll(".home-entry")).toHaveLength(1);
     await wrapper.get("#home-tab-issues").trigger("click");
     await wrapper.findAll(".home-entry")[0]!.trigger("click");
     expect(wrapper.get(".home-entry-detail h3").text()).toContain("3D 웹");
   });
   it("키보드로 탭을 이동하고 계정이 바뀌면 이전 상세를 닫을 수 있다.", async () => {
-    const wrapper = render();
+    const profile = createHomeProfile(userFixture("USER"));
+    profile.issues = [{ id: "one", title: "Issue", category: "IT", date: "2026.10.01", description: "", tags: [], paragraphs: [] }];
+    const wrapper = render(userFixture("USER"), true, profile);
     await wrapper
       .get("#home-tab-blog")
       .trigger("keydown", { key: "ArrowRight" });
@@ -145,7 +166,7 @@ describe("사용자의 집", () => {
       "true",
     );
     await wrapper.findAll(".home-entry")[0]!.trigger("click");
-    const next = createMockHome({
+    const next = createHomeProfile({
       ...userFixture("USER"),
       id: 2,
       name: "다음 사용자",
@@ -319,7 +340,7 @@ describe("사용자의 집", () => {
     await wrapper.get(".home-avatar img").trigger("error");
     expect(wrapper.find(".home-avatar img").exists()).toBe(false);
     expect(wrapper.get(".home-avatar").text()).toBe("기");
-    await wrapper.setProps({ profile: createMockHome({ ...owner, profileImageUrl: "https://images.example.com/new.png" }) });
+    await wrapper.setProps({ profile: createHomeProfile({ ...owner, profileImageUrl: "https://images.example.com/new.png" }) });
     expect(wrapper.get(".home-avatar img").attributes("src")).toBe("https://images.example.com/new.png");
   });
 });

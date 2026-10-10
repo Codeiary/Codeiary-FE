@@ -18,7 +18,7 @@ import {
   type Obstacle,
 } from "@/utils/city/navigation";
 import { places, type Destination } from "@/utils/city/places";
-import type { NeighborhoodBlock } from "@/services/mock-neighborhood";
+import type { NeighborhoodBlock } from "@/services/neighborhood";
 import {
   BLOCK_WIDTH,
   HOMES_PER_BLOCK,
