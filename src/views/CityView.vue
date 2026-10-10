@@ -1225,7 +1225,7 @@ onBeforeUnmount(() => {
                   콘텐츠로 교체할 수 있어요.
                 </div>
               </PostArticle>
-              <div class="article-like-actions">
+              <div v-if="article.visibility !== 'PRIVATE'" class="article-like-actions">
                 <PostLikeButton
                   :key="`post-like-${article.id}`"
                   :post-id="article.id"
