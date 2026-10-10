@@ -3,11 +3,16 @@ import { displayName } from "@/utils/profile/display-name";
 import Icon from "@/components/Icon.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
 import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
+import PostLikeButton from "@/components/blog/PostLikeButton.vue";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 import { authorSlug, postSlug } from "@/utils/blog/slug";
 
 defineProps<{ post: BlogPost; compact?: boolean }>();
-const emit = defineEmits<{ open: [id: number]; author: [author: BlogAuthor] }>();
+const emit = defineEmits<{
+  open: [id: number];
+  author: [author: BlogAuthor];
+  like: [];
+}>();
 
 function openPost(event: MouseEvent, id: number) {
   if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -45,17 +50,15 @@ function openPost(event: MouseEvent, id: number) {
         <div v-if="compact" class="post-row-meta">
           <span>{{ post.category }}</span>
           <time :datetime="post.createdAt">{{ post.date }}</time>
-          <span class="post-row-views" :aria-label="`조회 ${post.viewCount}회`">
-            <Icon name="eye" :size="12" />{{
-              post.viewCount.toLocaleString("ko-KR")
-            }}
-          </span>
           <span v-if="post.visibility === 'PRIVATE'" class="post-visibility">
             <Icon name="lock" :size="11" />비공개
           </span>
         </div>
       </div>
     </a>
+    <div v-if="compact" class="post-compact-actions">
+      <PostLikeButton :post-id="post.id" :like-count="post.likeCount" :liked-by-me="post.likedByMe" compact @updated="emit('like')" />
+    </div>
     <div v-if="!compact" class="post-card-details">
       <div class="post-author-line">
         <button
@@ -73,13 +76,10 @@ function openPost(event: MouseEvent, id: number) {
       </div>
       <div class="post-footer">
         <span>{{ post.date }}</span
-        ><span
-          ><span class="post-views" :aria-label="`조회 ${post.viewCount}회`"
-            ><Icon name="eye" :size="13" />{{
-              post.viewCount.toLocaleString("ko-KR")
-            }}</span
-          ><Icon name="arrow" :size="15"
-        /></span>
+        ><span class="post-footer-actions">
+          <PostLikeButton :post-id="post.id" :like-count="post.likeCount" :liked-by-me="post.likedByMe" @updated="emit('like')" />
+          <Icon name="arrow" :size="15" />
+        </span>
       </div>
     </div>
   </article>
@@ -98,6 +98,12 @@ function openPost(event: MouseEvent, id: number) {
   background: transparent;
   overflow: visible;
   transition: none;
+}
+.post-compact-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -8px;
+  padding-bottom: 8px;
 }
 .post-card-compact:hover {
   transform: none;
@@ -160,10 +166,10 @@ function openPost(event: MouseEvent, id: number) {
   color: var(--theme-muted);
   font-size: var(--font-size-min);
 }
-.post-row-views {
+.post-footer-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 .post-row-meta .post-visibility {
   padding: 0;

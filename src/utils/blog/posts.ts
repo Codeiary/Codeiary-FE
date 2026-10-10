@@ -17,7 +17,8 @@ export interface BlogPost {
   description: string;
   date: string;
   createdAt: string;
-  viewCount: number;
+  likeCount: number;
+  likedByMe: boolean;
   art: string;
   tags: string[];
   content?: string;

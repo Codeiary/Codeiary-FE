@@ -20,7 +20,7 @@ export async function render(url: string, apiBaseUrl: string, requestFetch = fet
   endpoint.search = new URLSearchParams({
     page: "0",
     size: String(BLOG_PAGE_SIZE),
-    sort: location.searchParams.get("sort") === "views" ? "VIEWS" : "LATEST",
+    sort: location.searchParams.get("sort") === "likes" ? "LIKES" : "LATEST",
     ...(location.searchParams.get("q") ? { search: location.searchParams.get("q")! } : {}),
     ...(location.searchParams.get("tag") ? { tag: location.searchParams.get("tag")! } : {}),
   }).toString();

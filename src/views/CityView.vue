@@ -22,6 +22,7 @@ import BlogPostList from "@/components/blog/BlogPostList.vue";
 import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
 import PostArticle from "@/components/blog/PostArticle.vue";
 import PostComments from "@/components/blog/comments/PostComments.vue";
+import PostLikeButton from "@/components/blog/PostLikeButton.vue";
 import { commentPostKey } from "@/utils/blog/comments";
 import { editPost } from "@/services/blog-storage";
 import { fetchPost, fetchPosts, fetchPostPage, removePost } from "@/services/blog-api";
@@ -133,7 +134,7 @@ async function loadBlogPosts() {
       const params = {
         search: search.value,
         tag: selectedTag.value,
-        sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
+        sort: (postSort.value === "likes" ? "LIKES" : "LATEST") as "LIKES" | "LATEST",
         page: blogPage.value - 1,
       };
       const key = JSON.stringify(params);
@@ -152,7 +153,7 @@ async function loadBlogPosts() {
       search: route.query.view === "home" ? "" : search.value,
       category: route.query.view === "home" ? "" : selectedCategory.value,
       tag: route.query.view === "home" ? "" : selectedTag.value,
-      sort: (postSort.value === "views" ? "VIEWS" : "LATEST") as "VIEWS" | "LATEST",
+      sort: (postSort.value === "likes" ? "LIKES" : "LATEST") as "LIKES" | "LATEST",
     };
     const key = JSON.stringify([user.value?.id, params]);
     const stored = cached(catalogCache, key);
@@ -187,7 +188,7 @@ async function loadBlogPosts() {
 }
 const isBlogRoute = computed(() => route.meta.blog === true);
 const postSort = computed(() =>
-  !route.params.authorSlug && route.query.sort === "views" ? "views" : "latest",
+  !route.params.authorSlug && route.query.sort === "likes" ? "likes" : "latest",
 );
 const search = computed(() =>
   typeof route.query.q === "string" ? route.query.q : "",
@@ -206,7 +207,7 @@ const selectedTag = computed(() =>
 if (initialPage) cacheResult(postPageCache, JSON.stringify({
   search: search.value,
   tag: selectedTag.value,
-  sort: postSort.value === "views" ? "VIEWS" : "LATEST",
+  sort: postSort.value === "likes" ? "LIKES" : "LATEST",
   page: blogPage.value - 1,
 }), initialPage);
 const blogLocations = new Map<string, number>();
@@ -463,6 +464,13 @@ watch(
   { immediate: true },
 );
 const canDeleteArticle = computed(() => Boolean(user.value && isOwnBlog.value && article.value?.author?.id === user.value.id));
+function refreshLikeSort() {
+  postPageCache.clear();
+  catalogCache.clear();
+  if (route.name === "blog" && postSort.value === "likes") {
+    void loadBlogPosts();
+  }
+}
 const blogNotFound = computed(
   () => {
     if (
@@ -1183,6 +1191,15 @@ onBeforeUnmount(() => {
                   콘텐츠로 교체할 수 있어요.
                 </div>
               </PostArticle>
+              <div class="article-like-actions">
+                <PostLikeButton
+                  :key="`post-like-${article.id}`"
+                  :post-id="article.id"
+                  :like-count="article.likeCount"
+                  :liked-by-me="article.likedByMe"
+                  @updated="refreshLikeSort"
+                />
+              </div>
               <PostComments :key="commentPostKey(article)" :post="article" />
             </div>
             <div
@@ -1230,6 +1247,7 @@ onBeforeUnmount(() => {
                 "
                 @open="openArticle"
                 @author="openAuthorBlog"
+                @like="refreshLikeSort"
                 @write="startWriting()"
               >
                 <template #actions>

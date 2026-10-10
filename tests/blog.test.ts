@@ -19,7 +19,7 @@ vi.mock("@/services/blog-api", () => ({
   fetchPostPage: async ({ page, search, sort, tag }: { page: number; search?: string; sort?: string; tag?: string }) => {
     const { filterPosts } = await import("@/utils/blog/post-collection");
     const posts = filterPosts(blogApiMock.posts.filter((post) => post.visibility !== "PRIVATE"), {
-      search: search ?? "", category: "", tag: tag ?? "", sort: sort === "VIEWS" ? "views" : "latest",
+      search: search ?? "", category: "", tag: tag ?? "", sort: sort === "LIKES" ? "likes" : "latest",
     });
     return { content: posts.slice(page * 12, (page + 1) * 12), page, totalPages: Math.ceil(posts.length / 12), totalElements: posts.length };
   },
@@ -201,7 +201,7 @@ describe("블로그 글 목록", () => {
     ]);
   });
 
-  it("전체 글을 조회순으로 정렬하고 조회수가 같으면 최신 글부터 볼 수 있다.", async () => {
+  it("전체 글을 인기순으로 정렬하고 좋아요 수가 같으면 최신 글부터 볼 수 있다.", async () => {
     const wrapper = await render();
     await wrapper.findAll(".post-sort button")[1]!.trigger("click");
     await flushPromises();
@@ -234,7 +234,7 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     expect(wrapper.vm.$router.currentRoute.value.query).toEqual({
       q: "Vue",
-      sort: "views",
+      sort: "likes",
     });
     expect(
       wrapper.get('[aria-current="page"][aria-label="1페이지"]').text(),
@@ -431,7 +431,7 @@ describe("블로그 글 목록", () => {
     await wrapper.vm.$router.push({
       name: "user-blog",
       params: { authorSlug: "기록자" },
-      query: { category: "개발 기록", q: "vue", sort: "views" },
+      query: { category: "개발 기록", q: "vue", sort: "likes" },
     });
     await flushPromises();
     expect(titles(wrapper)).toEqual(["나의 Vue 기록"]);
@@ -445,13 +445,13 @@ describe("블로그 글 목록", () => {
     expect(wrapper.vm.$router.currentRoute.value.query).toEqual({
       category: "개발 기록",
       q: "vue",
-      sort: "views",
+      sort: "likes",
     });
     expect(
       (wrapper.get(".search-input input").element as HTMLInputElement).value,
     ).toBe("vue");
     expect(titles(wrapper)).toEqual(["나의 Vue 기록"]);
-    await wrapper.vm.$router.replace({ query: { sort: "views" } });
+    await wrapper.vm.$router.replace({ query: { sort: "likes" } });
     await flushPromises();
     expect(titles(wrapper)).toEqual(["나의 Vue 기록", "나의 비공개 글"]);
   });

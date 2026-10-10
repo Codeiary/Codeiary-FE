@@ -6,7 +6,7 @@ function pageResponse(title = "서버에서 받은 공개 글") {
   return Response.json({
     content: [{
       id: 1, author: { id: 2, nickname: "기록자" }, title, category: "개발",
-      publicPost: true, viewCount: 10, createdAt: "2026-10-09T00:00:00Z",
+      publicPost: true, likeCount: 10, likedByMe: false, createdAt: "2026-10-09T00:00:00Z",
       representativeImageUrl: "https://img.codeiary.com/cover.jpg",
       tags: ["java", "spring"],
     }], page: 0, totalPages: 3, totalElements: 25,

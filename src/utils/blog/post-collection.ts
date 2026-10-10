@@ -4,7 +4,7 @@ export interface PostFilters {
   search: string;
   category: string;
   tag: string;
-  sort: "latest" | "views";
+  sort: "latest" | "likes";
 }
 
 export function categoryCounts(posts: readonly BlogPost[]) {
@@ -34,8 +34,8 @@ export function filterPosts(posts: readonly BlogPost[], filters: PostFilters) {
       );
     })
     .sort((left, right) => {
-      if (filters.sort === "views" && left.viewCount !== right.viewCount)
-        return right.viewCount - left.viewCount;
+      if (filters.sort === "likes" && left.likeCount !== right.likeCount)
+        return right.likeCount - left.likeCount;
       return (
         Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
         right.id - left.id

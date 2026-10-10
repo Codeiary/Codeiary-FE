@@ -10,7 +10,7 @@ const input: PostInput = {
 };
 const response = {
   ...input, id: 10, author: { id: 1, nickname: "기록자" },
-  createdAt: "2026-10-09T00:00:00Z", viewCount: 0,
+  createdAt: "2026-10-09T00:00:00Z", likeCount: 0, likedByMe: false,
 };
 
 describe("게시글 태그 API", () => {
