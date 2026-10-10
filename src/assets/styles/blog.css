@@ -476,11 +476,11 @@
   color: var(--theme-muted);
   border-color: var(--theme-border);
 }
-.post-views {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-right: 5px;
+.article-like-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 0 18px;
+  border-bottom: 1px solid var(--theme-border);
 }
 .blog .art-caption {
   font-size: var(--font-size-min);

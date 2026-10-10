@@ -14,7 +14,8 @@ interface ApiPost {
   tags?: string[];
   representativeImageUrl?: string | null;
   publicPost: boolean;
-  viewCount: number;
+  likeCount?: number;
+  likedByMe?: boolean;
   createdAt: string;
   updatedAt?: string;
 }
@@ -49,7 +50,8 @@ export function mapPost(post: ApiPost): BlogPost {
     date: new Date(post.createdAt).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }).replace(/-/g, "."),
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
-    viewCount: post.viewCount ?? 0,
+    likeCount: post.likeCount ?? 0,
+    likedByMe: post.likedByMe ?? false,
     art: "code",
     tags: post.tags ?? [],
     content: post.content,
@@ -59,7 +61,7 @@ export function mapPost(post: ApiPost): BlogPost {
   };
 }
 
-function query(params: { search?: string; category?: string; tag?: string; sort?: "LATEST" | "VIEWS"; page?: number; size?: number }) {
+function query(params: { search?: string; category?: string; tag?: string; sort?: "LATEST" | "LIKES"; page?: number; size?: number }) {
   const values = new URLSearchParams();
   if (params.search) values.set("search", params.search);
   if (params.category) values.set("category", params.category);
@@ -70,7 +72,7 @@ function query(params: { search?: string; category?: string; tag?: string; sort?
   return `?${values}`;
 }
 
-export async function fetchPosts(params: { mine?: boolean; search?: string; category?: string; tag?: string; sort?: "LATEST" | "VIEWS"; page?: number; size?: number } = {}) {
+export async function fetchPosts(params: { mine?: boolean; search?: string; category?: string; tag?: string; sort?: "LATEST" | "LIKES"; page?: number; size?: number } = {}) {
   const path = `${params.mine ? "/posts/mine" : "/posts"}${query(params)}`;
   const response = params.mine
     ? await auth.authorizedRequest<{ content: ApiPost[] }>(path)
@@ -78,7 +80,7 @@ export async function fetchPosts(params: { mine?: boolean; search?: string; cate
   return response.content.map(mapPost);
 }
 
-export async function fetchPostPage(params: { search?: string; tag?: string; sort?: "LATEST" | "VIEWS"; page: number }) {
+export async function fetchPostPage(params: { search?: string; tag?: string; sort?: "LATEST" | "LIKES"; page: number }) {
   return mapPostPage(await api.request<ApiPostPage>(`/posts${query({ ...params, size: BLOG_PAGE_SIZE })}`));
 }
 
@@ -109,4 +111,15 @@ export async function updatePost(id: number, input: PostInput) {
 
 export function removePost(id: number) {
   return auth.authorizedRequest<void>(`/posts/${id}`, { method: "DELETE" });
+}
+
+export interface PostLikeState {
+  likeCount: number;
+  likedByMe: boolean;
+}
+
+export function updatePostLike(id: number, liked: boolean) {
+  return auth.authorizedRequest<PostLikeState>(`/posts/${id}/likes`, {
+    method: liked ? "POST" : "DELETE",
+  });
 }

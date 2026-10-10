@@ -16,7 +16,7 @@ const props = defineProps<{
   search: string;
   category: string;
   tag: string;
-  sort: "latest" | "views";
+  sort: "latest" | "likes";
   page: number;
   totalPages?: number;
   loading?: boolean;
@@ -26,10 +26,11 @@ defineEmits<{
   "update:search": [value: string];
   "update:category": [value: string];
   "update:tag": [value: string];
-  "update:sort": [value: "latest" | "views"];
+  "update:sort": [value: "latest" | "likes"];
   "update:page": [value: number];
   open: [id: number];
   author: [author: BlogAuthor];
+  like: [];
   write: [];
 }>();
 // Counts use the visible collection before search/category filtering.
@@ -92,10 +93,10 @@ const visiblePosts = computed(() => {
               최신순
             </button>
             <button
-              :aria-pressed="sort === 'views'"
-              @click="$emit('update:sort', 'views')"
+              :aria-pressed="sort === 'likes'"
+              @click="$emit('update:sort', 'likes')"
             >
-              조회순
+              인기순
             </button>
           </div>
         </div>
@@ -109,6 +110,7 @@ const visiblePosts = computed(() => {
           :compact="personal"
           @open="$emit('open', $event)"
           @author="$emit('author', $event)"
+          @like="$emit('like')"
         />
       </div>
       <BlogPagination
