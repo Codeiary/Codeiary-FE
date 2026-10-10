@@ -13,6 +13,8 @@ on:
       - "env.d.ts"
       - "index.html"
       - "deploy/**"
+      - "server/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:
@@ -53,7 +55,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/Dockerfile.static
+          file: deploy/Dockerfile
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
       - name: Deploy through SSM
@@ -72,9 +74,12 @@ jobs:
               \"docker pull ${IMAGE}\",
               \"docker create --name codeiary-fe-release ${IMAGE}\",
               \"find /var/www/codeiary -mindepth 1 -maxdepth 1 -exec rm -rf {} +\",
-              \"docker cp codeiary-fe-release:/app/. /var/www/codeiary/\",
+              \"docker cp codeiary-fe-release:/app/dist/client/. /var/www/codeiary/\",
               \"docker cp codeiary-fe-release:/etc/codeiary/codeiary.conf /etc/nginx/sites-available/codeiary\",
               \"docker rm codeiary-fe-release\",
+              \"docker rm -f codeiary-fe >/dev/null 2>&1 || true\",
+              \"docker run -d --name codeiary-fe --restart unless-stopped --network host -e HOST=127.0.0.1 -e PORT=3000 -e API_ORIGIN=http://127.0.0.1:8080 ${IMAGE}\",
+              \"curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:3000/healthz\",
               \"ln -sfn /etc/nginx/sites-available/codeiary /etc/nginx/sites-enabled/codeiary\",
               \"rm -f /etc/nginx/sites-enabled/default\",
               \"nginx -t\",

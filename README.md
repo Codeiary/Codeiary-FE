@@ -31,7 +31,7 @@ Vue 3와 Three.js로 구현한 도시형 개인 블로그입니다. 화면 전�
 - 상단 메뉴에서도 각 콘텐츠 창을 바로 열 수 있으며, Escape로 닫을 수 있습니다.
 
 블로그 검색·분류, 글 상세 보기, 프로젝트 상세 보기, IT 이슈 상세 보기는
-목업 데이터를 사용합니다. 실제 계정 로그인은 JWT API에 연결하며, 실시간 뉴스 피드는 포함하지 않습니다.
+목업 데이터를 사용하며, 실시간 뉴스 피드는 포함하지 않습니다. Google 로그인은 백엔드 OAuth2·쿠키 인증을 사용합니다.
 
 도시 모델과 간판은 코드로 생성합니다. 외부 3D 모델을 내려받을 필요가 없습니다.
 `src/city/world.ts`는 3D 장면과 조작, `src/city/navigation.ts`는 충돌과 경로 탐색,
@@ -40,26 +40,55 @@ Vue 3와 Three.js로 구현한 도시형 개인 블로그입니다. 화면 전�
 WebGL을 사용할 수 없는 환경에서는 상단 메뉴로 콘텐츠를 볼 수 있습니다.
 
 API 요청은 운영 환경에서 같은 오리진의 `/api`를 사용합니다. 개발 서버에서는
-`vite.config.ts`가 `/api` 요청을 `http://localhost:8080`으로 프록시합니다.
+`server/index.mjs`가 `/api`, `/oauth2`, `/login/oauth2` 요청을 `http://localhost:8080`으로 프록시합니다.
+운영 Nginx도 같은 OAuth 시작·콜백 경로를 백엔드에 전달합니다.
 
-## 로그인 / 로그아웃
+## Google 로그인 / 온보딩
 
-- `/login`: 이메일·비밀번호로 로그인합니다. 기존 `/admin/login`은 `/login`으로 이동합니다.
-- 메인 헤더와 관리자 헤더에서 로그아웃할 수 있습니다. 서버에서 토큰 폐기를 확인한 뒤 세션을 지우며, 연결 실패 시 재시도할 수 있습니다.
-- `/admin`은 로그인 후 서버의 `/api/admin/me`로 관리자 권한을 확인합니다. 일반 사용자는 메인으로 이동합니다. 관리자 콘텐츠는 추후 추가합니다.
-- 이메일은 소문자만 허용하며 자동 변환하지 않습니다. 비밀번호는 8~20자이며 영문·숫자·특수문자 3개 이상을 포함해야 합니다.
-- `VITE_API_BASE_URL` 기본값은 `/api`입니다. 로컬에서는 백엔드를 `localhost:8080`에서 실행해야 합니다.
+- `/login`: Google 로그인만 표시하며 기존 이메일·비밀번호 로그인은 제거했습니다.
+- `/auth/callback`: 백엔드가 로그인 쿠키를 설정한 뒤 복귀하는 화면입니다. `GET /api/users/me`로 현재 사용자를 확인하고 온보딩 또는 원래 화면으로 이동합니다.
+- `/onboarding`: 필수 닉네임만 설정합니다. 닉네임은 한글·영문·숫자·밑줄 2~20자이며, 입력 중 중복 확인과 저장 시 중복 거절을 처리합니다. 신규 사용자는 `PENDING`이고 저장 후 `USER`로 전환됩니다.
+- 내 집의 프로필 수정에서 닉네임·선택 프로필 사진·GitHub 주소·공개 연락 이메일을 설정합니다. 닉네임 입력 중 중복 여부를 표시하며, 중복 또는 확인 실패 상태에서는 저장할 수 없습니다. 본인의 집에서만 편집할 수 있으며, 로그인 이메일은 공개 연락처에 자동으로 넣지 않습니다. 사진 선택 후 미리보기·변경·삭제가 가능하며, 저장을 누르면 사진 업로드 후 프로필을 갱신합니다.
+- 인증 요청은 `credentials: "include"`로 쿠키를 전송합니다. 프론트는 JWT를 읽거나 저장하지 않으며 Authorization 헤더를 만들지 않습니다. 로그인 시작 시 `sessionStorage`에는 안전한 복귀 주소와 시작 시각만 저장합니다. 실제 로그인은 저장소가 차단되어도 진행하고, 복귀 정보가 없으면 홈으로 이동합니다.
 
-`src/auth/session.ts`에서 로그인·토큰 회전·서버 로그아웃을 처리합니다.
-액세스 토큰은 메모리에, 리프레시 토큰과 만료 시각은 `sessionStorage`에 저장합니다.
-같은 탭을 새로고침하면 리프레시 토큰으로 복원합니다. 탭을 닫으면 브라우저 세션이 종료되며,
-영구 로그인 기능은 제공하지 않습니다. 비밀번호는 저장하지 않습니다.
-백엔드가 JSON으로 토큰을 반환하므로 현재 저장 방식은 JavaScript에서 접근 가능합니다.
-HttpOnly 쿠키로 전환하려면 백엔드 인증 계약도 함께 변경해야 합니다.
+### 백엔드 연결
 
-만료된 액세스 토큰은 API 요청 시 갱신하고, 동시에 발생한 요청은 한 번의 갱신을 공유합니다.
-갱신 토큰이 거절되면 세션을 지우고 재로그인을 안내합니다. 로그인 화면에는 실패 안내,
-중복 제출 방지, 비밀번호 표시 전환, 라이트·다크 모드가 포함되어 있습니다.
+Google 로그인 시작 주소는 기본적으로 `/oauth2/authorization/google`이며 필요하면
+`VITE_GOOGLE_AUTH_URL`로 지정합니다.
+OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은 모두 백엔드가 담당합니다.
+프론트에는 Google 비밀 키나 앱 교환 코드가 필요하지 않습니다.
+
+백엔드 `oauth2.redirect-home`을 프론트의 `/auth/callback` 주소로 설정해야 합니다.
+로컬에서는 `http://localhost:5173/auth/callback`, 운영에서는
+`https://codeiary.com/auth/callback`입니다. Google에 등록할 승인된 리디렉션 URI는
+서버 콜백인 `/login/oauth2/code/google` 경로이며, 로컬 프록시를 사용하면
+`http://localhost:5173/login/oauth2/code/google`로 설정합니다.
+운영은 `https://codeiary.com/login/oauth2/code/google`입니다.
+인증 쿠키의 SameSite=Strict 설정에 맞게 프론트와 API는 같은 사이트에서 서비스합니다.
+
+| 요청 | API 경로 | 계약 |
+| --- | --- | --- |
+| GET | `/api/users/me` | 인증 쿠키로 현재 사용자 프로필 조회 |
+| POST | `/api/auth/reissue` | 본문 없이 Refresh Token 쿠키 전송, 204 및 새 인증 쿠키 |
+| POST | `/api/auth/logout` | 본문 없이 인증 쿠키 전송, 204 및 쿠키 삭제 |
+| GET | `/api/admin/me` | ADMIN 권한 확인 및 사용자 프로필 조회 |
+
+프론트는 401 응답을 받으면 재발급 요청을 한 번 공유하여 처리하고 원래 요청을 재시도합니다.
+로그아웃은 서버의 쿠키 삭제·토큰 폐기를 확인한 뒤 사용자 상태를 비웁니다.
+
+온보딩과 내 집 프로필 설정은 다음 API를 사용합니다. 백엔드 [사용자 온보딩 이슈 #17](https://github.com/Codeiary/Codeiary-BE/issues/17) 구현을 함께 적용해야 합니다.
+
+- `GET /api/users/nickname-availability?nickname=...` → `{ available: boolean }`.
+- `POST /api/users/me/onboarding` → `multipart/form-data`의 `nickname`만 받고 온보딩이 완료된 사용자 프로필을 반환합니다. 중복은 `409 / NICKNAME_TAKEN`으로 응답합니다.
+- 선택한 원본은 브라우저에서 256×256 JPEG로 변환하며, 프로필 업로드는 1MiB 이하로 제한합니다.
+- `POST /api/images/presigned-url`에 `{ contentType, contentLength }`를 인증 쿠키와 함께 보내고 `{ uploadUrl, imageUrl, headers, expiresAt }`를 받습니다. 서버의 공통 이미지 계약은 JPG·PNG 10MiB 이하입니다.
+- 로컬 업로드는 백엔드 폴더에서 `docker compose -f compose.local.yaml up -d`로 S3Mock을 실행합니다. 개발 서버에서만 `http://localhost:9090/codeiary-local/` 이미지 주소를 허용하며, 운영 빌드는 HTTPS만 허용합니다.
+- 파일은 발급받은 HTTPS `uploadUrl`에 `PUT`으로 직접 전송합니다. 서버가 지정한 `Content-Type` 등 업로드 헤더만 사용하고 쿠키·Authorization 헤더를 보내지 않습니다. 파일 전송 제한 시간은 60초이며, 실패해도 토큰 재발급이나 자동 재전송을 하지 않습니다.
+- S3 전송 성공 후 CloudFront `imageUrl`을 기존 프로필 수정 요청에 포함합니다. 주소 발급이나 파일 전송만으로 사용자 프로필을 바꾸지 않습니다. S3 CORS에는 프론트 오리진의 `PUT`과 업로드 헤더가 허용되어야 합니다.
+- `PUT /api/users/me/profile` → JSON의 `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`을 저장하고 갱신된 본인 프로필을 반환합니다. 비워 둔 선택 항목은 `null`로 보내 삭제합니다. `PENDING` 계정은 사용할 수 없습니다.
+
+프로필은 `id`, `email`, `name`, `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`, `onboardingCompleted`, `role`을 포함합니다.
+온보딩을 완료하지 않고 나가도 다시 로그인하면 `onboardingCompleted: false`를 확인해 온보딩 화면으로 이동합니다.
 
 ## 검증
 
@@ -68,13 +97,31 @@ npm test
 npm run build
 ```
 
-인증 상태·토큰 갱신·로그아웃 실패·관리자 라우트 보호와 로그인 폼 동작을 검증합니다.
+OAuth 복귀·쿠키 세션 복원 및 재발급·로그아웃 실패·온보딩·관리자 라우트 보호를 검증합니다.
 CI에서도 테스트 통과 후 타입 검사와 프로덕션 빌드를 실행합니다.
 
 ## Lightsail 배포
 
-`main` 브랜치에 push하면 GitHub Actions가 정적 파일을 Docker 이미지로 패키징해
-Amazon ECR Public에 게시하고, SSM Run Command로 `/var/www/codeiary`와 Nginx 설정을 배포합니다.
+`main` 브랜치에 push하면 GitHub Actions가 클라이언트·SSR 번들을 Docker 이미지로 패키징해
+Amazon ECR Public에 게시합니다. SSM Run Command로 정적 파일은 `/var/www/codeiary`에 복사하고,
+Node 서버는 `codeiary-fe` 컨테이너로 실행합니다. Nginx는 `/blog` 요청만 내부 `127.0.0.1:3000`으로 전달합니다.
+API·OAuth는 기존 백엔드로, 나머지 화면과 정적 자산은 기존 Nginx 경로로 제공합니다.
+정적 파일만 교체하면 SSR은 동작하지 않으므로 Docker·Nginx 설정도 함께 배포해야 합니다.
+
+### 블로그 SSR
+
+- `/blog`: 공개 글 12개와 페이지 링크를 서버에서 렌더링하고 브라우저에서 hydrate합니다.
+- `/blog?page=2` 이후: CSR이며 최초 응답의 robots 메타 태그와 `X-Robots-Tag`에 `noindex, nofollow`를 설정합니다.
+- `/blog?page=1`은 `/blog`로 리다이렉트합니다. 각 페이지의 canonical은 해당 페이지 주소입니다.
+- 검색·정렬 결과도 색인에서 제외합니다. SPA 이동 시 메타 태그를 갱신하고 다른 화면으로 나가면 제거합니다.
+- 서버는 인증 쿠키를 전달하지 않고 공개 목록만 조회합니다. 로그인 상태와 테마는 hydration 후 브라우저에서 복구합니다.
+- 공개 API 장애 시 빈 목록을 200으로 색인시키지 않도록 503을 반환합니다.
+- robots.txt는 페이지네이션을 차단하지 않습니다. 검색엔진이 응답의 `noindex`를 읽을 수 있어야 합니다.
+- 현재 sitemap.xml은 홈과 블로그 목록만 포함합니다. 후속 페이지의 `nofollow`로 제한되는 글 탐색은 공개 게시글 사이트맵을 추가해 보완할 수 있습니다.
+
+로컬 개발은 `npm run dev`(5173), 빌드 결과 확인은 `npm run build && npm run preview`(3000)를 사용합니다.
+`API_ORIGIN`은 백엔드 주소(기본 `http://localhost:8080`), `PORT`와 `HOST`는 프론트 서버 바인딩 설정입니다.
+Google OAuth 로컬 콜백은 5173에 등록되어 있으므로 인증을 확인할 때는 개발 서버를 사용합니다.
 
 GitHub Actions repository variables:
 

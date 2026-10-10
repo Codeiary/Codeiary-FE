@@ -14,7 +14,24 @@ withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 });
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <template v-if="name === 'mail'">
+    <template v-if="name === 'plus'">
+      <path d="M12 5v14M5 12h14" />
+    </template>
+    <template v-else-if="name === 'run'">
+      <circle cx="15.5" cy="4" r="2" />
+      <path d="m8 9 4-2 4 5h4M12 7l-2 7 5 3-1 5M10 14l-4 5H2" />
+    </template>
+    <template v-else-if="name === 'search'">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m16 16 5 5" />
+    </template>
+    <template v-else-if="name === 'menu'">
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </template>
+    <template v-else-if="name === 'home'">
+      <path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8" />
+    </template>
+    <template v-else-if="name === 'mail'">
       <rect x="3" y="5" width="18" height="14" rx="3" />
       <path d="m3 7 9 6 9-6" />
     </template>
@@ -27,8 +44,14 @@ withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 });
       <circle cx="12" cy="12" r="3" />
       <path v-if="name === 'eye-off'" d="m3 3 18 18" />
     </template>
+    <template v-else-if="name === 'heart'">
+      <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" />
+    </template>
     <template v-else-if="name === 'arrow-right'">
       <path d="M4 12h16m-6-6 6 6-6 6" />
+    </template>
+    <template v-else-if="name === 'arrow-left'">
+      <path d="M20 12H4m6-6-6 6 6 6" />
     </template>
     <template v-else-if="name === 'check'">
       <path d="m5 12 4 4L19 6" />
@@ -78,6 +101,9 @@ withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 });
     </template>
     <template v-else-if="name === 'close'">
       <path d="m6 6 12 12M18 6 6 18" />
+    </template>
+    <template v-else-if="name === 'trash'">
+      <path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" />
     </template>
     <template v-else-if="name === 'chevron'">
       <path d="m9 5 7 7-7 7" />

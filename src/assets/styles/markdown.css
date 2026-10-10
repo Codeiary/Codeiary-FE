@@ -1,0 +1,192 @@
+.markdown-content {
+  color: var(--theme-text);
+  font-size: 16px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  color: var(--theme-text);
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: -0.04em;
+  margin: 1.7em 0 0.65em;
+}
+.markdown-content h1 {
+  font-size: 2em;
+}
+.markdown-content h2 {
+  font-size: 1.6em;
+}
+.markdown-content h3 {
+  font-size: 1.25em;
+}
+.markdown-content p {
+  margin: 0 0 1.25em;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+.markdown-content strong {
+  font-weight: 750;
+}
+.markdown-content em {
+  font-style: italic;
+  font-synthesis: style;
+}
+.markdown-content a {
+  color: var(--theme-accent);
+  text-underline-offset: 4px;
+}
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.7em;
+  margin: 1em 0;
+}
+.markdown-content li {
+  padding-left: 0.25em;
+  margin: 0.35em 0;
+}
+.markdown-content blockquote {
+  border-left: 3px solid var(--theme-accent);
+  padding: 14px 22px;
+  margin: 1.5em 0;
+  background: var(--theme-raised);
+  border-radius: 0 8px 8px 0;
+  color: var(--theme-text);
+  font-size: inherit;
+}
+.markdown-content blockquote p:last-child {
+  margin-bottom: 0;
+}
+.markdown-content code {
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: var(--theme-raised);
+  color: var(--theme-accent);
+  font-size: max(var(--font-size-min), 0.86em);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.markdown-content pre {
+  overflow-x: auto;
+  padding: 22px;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-raised);
+  font-size: var(--font-size-min);
+  line-height: 1.7;
+}
+.markdown-content pre code {
+  padding: 0;
+  background: none;
+  color: var(--theme-text);
+  font-size: inherit;
+  white-space: pre;
+}
+.markdown-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5em auto;
+  border-radius: 10px;
+}
+.markdown-content .markdown-attachment-pending {
+  background: var(--theme-raised);
+  aspect-ratio: var(--image-placeholder-ratio);
+}
+.markdown-content .markdown-attachment-pending[data-image-original="true"] {
+  width: var(--image-placeholder-width) !important;
+}
+.markdown-content .markdown-image-row {
+  --image-row-gap: clamp(6px, 1vw, 12px);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--image-row-gap);
+  width: 100%;
+  margin: 1.5em 0;
+}
+.markdown-content .markdown-image-row > img {
+  min-width: 0;
+  flex-shrink: 1;
+  object-fit: contain;
+}
+.markdown-content .markdown-image-row > .markdown-image-missing {
+  flex: 1;
+  min-width: 0;
+}
+.markdown-content .markdown-editable-image {
+  cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+  transition: outline-color 0.15s;
+}
+.markdown-content .markdown-editable-image:hover,
+.markdown-content .markdown-editable-image:focus-visible,
+.markdown-content .markdown-editable-image[aria-pressed="true"] {
+  outline-color: var(--theme-accent);
+}
+.markdown-content table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: max(var(--font-size-min), 0.9em);
+}
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--theme-border);
+  padding: 10px 16px;
+  min-width: 100px;
+}
+.markdown-content th {
+  background: var(--theme-raised);
+  font-weight: 650;
+}
+.markdown-content hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--theme-border);
+}
+.markdown-content .katex-display,
+.markdown-content section {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 6px;
+}
+.markdown-content .katex {
+  font-size: 1.1em;
+}
+.markdown-content .markdown-image-missing,
+.markdown-image-error {
+  display: block;
+  color: var(--theme-muted);
+  font-size: var(--font-size-min);
+}
+.content-window .article-body .markdown-content :is(h1, h2, h3, p, blockquote) {
+  max-width: none;
+}
+.content-window .article-body .markdown-content h2 {
+  font-size: 1.6em;
+  margin: 1.7em 0 0.65em;
+}
+.content-window .article-body .markdown-content h3 {
+  font-size: 1.25em;
+}
+.content-window .article-body .markdown-content p {
+  color: var(--theme-text);
+  font-size: inherit;
+  line-height: inherit;
+}
+@media (max-width: 600px) {
+  .markdown-content {
+    font-size: var(--font-size-min);
+  }
+}

@@ -1,28 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
-import LoginPage from "../src/pages/LoginPage.vue";
-import AccountActions from "../src/components/AccountActions.vue";
-import { auth, AuthError } from "../src/auth/session";
-import { credentials, deferred, userFixture } from "./fixtures/auth";
-
-vi.mock("../src/auth/session", async (original) => {
-  const module = await original<typeof import("../src/auth/session")>();
+import LoginPage from "@/views/LoginView.vue";
+import AccountActions from "@/components/AccountActions.vue";
+import { auth, AuthError } from "@/store/auth";
+import { googleLoginUrl } from "@/utils/auth/oauth";
+import { loginDestination } from "@/router/auth-guard";
+import { userFixture } from "./fixtures/auth";
+vi.mock("@/store/auth", async (original) => {
+  const module = await original<typeof import("@/store/auth")>();
   const { ref, shallowRef } = await import("vue");
   return {
     ...module,
     auth: {
+      ...module.auth,
       user: shallowRef(null),
       notice: ref(""),
       signingOut: ref(false),
-      login: vi.fn(),
       logout: vi.fn(),
     },
   };
 });
+vi.mock("@/utils/auth/oauth", async (original) => ({
+  ...(await original<typeof import("@/utils/auth/oauth")>()),
+  googleLoginUrl: vi.fn(),
+}));
 const user = auth.user as { value: ReturnType<typeof userFixture> | null };
 const wrappers: VueWrapper[] = [];
-
 async function render(
   component: typeof LoginPage | typeof AccountActions = LoginPage,
   path = "/login",
@@ -44,92 +48,41 @@ async function render(
   wrappers.push(wrapper);
   return { wrapper, router };
 }
-async function fillForm(wrapper: VueWrapper) {
-  await wrapper.get("#login-email").setValue(credentials.email);
-  await wrapper.get("#login-password").setValue(credentials.password);
-}
-
-describe("로그인 화면", () => {
+describe("Google 로그인 화면", () => {
   beforeEach(() => {
     user.value = null;
-    vi.mocked(auth.login).mockReset();
     vi.mocked(auth.logout).mockReset();
+    vi.mocked(googleLoginUrl).mockReset();
   });
-  afterEach(() => {
-    wrappers.splice(0).forEach((wrapper) => wrapper.unmount());
-  });
-
-  it("빈 입력을 안내하고 첫 번째 오류 필드로 이동할 수 있다.", async () => {
+  afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
+  it("기존 이메일과 비밀번호 입력 없이 Google 로그인만 표시할 수 있다.", async () => {
     const { wrapper } = await render();
-    await wrapper.get("form").trigger("submit");
-    await flushPromises();
-    expect(wrapper.get("#email-error").text()).toContain("입력해");
-    expect(document.activeElement?.id).toBe("login-email");
-    expect(auth.login).not.toHaveBeenCalled();
+    expect(wrapper.find("input").exists()).toBe(false);
+    expect(wrapper.get(".google-signin").text()).toBe("Google로 계속하기");
+    expect(wrapper.get(".auth-browse").attributes("href")).toBe("/");
   });
-
-  it("대문자 이메일을 자동 변환하지 않고 수정을 요청할 수 있다.", async () => {
-    const { wrapper } = await render();
-    await fillForm(wrapper);
-    await wrapper.get("#login-email").setValue("Writer@example.com");
-    await wrapper.get("form").trigger("submit");
-    expect(wrapper.get("#email-error").text()).toContain("소문자");
-    expect(
-      (wrapper.get("#login-email").element as HTMLInputElement).value,
-    ).toBe("Writer@example.com");
-    expect(auth.login).not.toHaveBeenCalled();
-  });
-
-  it("비밀번호를 표시하고 다시 숨길 수 있다.", async () => {
-    const { wrapper } = await render();
-    await wrapper.get("button[aria-label='비밀번호 보기']").trigger("click");
-    expect(wrapper.get("#login-password").attributes("type")).toBe("text");
-    await wrapper.get("button[aria-label='비밀번호 숨기기']").trigger("click");
-    expect(wrapper.get("#login-password").attributes("type")).toBe("password");
-  });
-
-  it("중복 제출을 막고 성공 후 메인으로 이동할 수 있다.", async () => {
-    const pending = deferred<void>();
-    vi.mocked(auth.login).mockReturnValue(pending.promise);
-    const { wrapper, router } = await render();
-    await fillForm(wrapper);
-    await wrapper.get("form").trigger("submit");
-    await wrapper.get("form").trigger("submit");
-    expect(auth.login).toHaveBeenCalledOnce();
-    expect(
-      wrapper.get("button[type='submit']").attributes("disabled"),
-    ).toBeDefined();
-    pending.resolve();
-    await flushPromises();
-    expect(router.currentRoute.value.name).toBe("city");
-    expect(
-      (wrapper.get("#login-password").element as HTMLInputElement).value,
-    ).toBe("");
-  });
-
-  it("인증 실패를 안내하고 재시도할 수 있다.", async () => {
-    vi.mocked(auth.login).mockRejectedValueOnce(
-      new AuthError(
-        401,
-        "INVALID_CREDENTIALS",
-        "이메일 또는 비밀번호를 확인해 주세요.",
-      ),
+  it("Google 연결을 시작하지 못해도 오류를 안내하고 재시도할 수 있다.", async () => {
+    vi.mocked(googleLoginUrl).mockImplementation(() => {
+      throw new Error("로그인 연결을 확인해 주세요.");
+    });
+    const { wrapper } = await render(
+      LoginPage,
+      "/login?redirect=/blog/test/post",
     );
-    const { wrapper } = await render();
-    await fillForm(wrapper);
-    await wrapper.get("form").trigger("submit");
-    await flushPromises();
-    expect(wrapper.get("[role='alert']").text()).toContain(
-      "이메일 또는 비밀번호",
-    );
+    await wrapper.get(".google-signin").trigger("click");
+    expect(googleLoginUrl).toHaveBeenCalledWith("/blog/test/post");
+    expect(wrapper.get('[role="alert"]').text()).toContain("연결");
     expect(
-      wrapper.get("button[type='submit']").attributes("disabled"),
+      wrapper.get(".google-signin").attributes("disabled"),
     ).toBeUndefined();
-    expect(
-      (wrapper.get("#login-email").element as HTMLInputElement).value,
-    ).toBe(credentials.email);
   });
-
+  it("내부 게시글로 복귀하고 외부 주소는 차단할 수 있다.", () => {
+    expect(loginDestination("/blog/커밋여행자/기록")).toBe(
+      "/blog/커밋여행자/기록",
+    );
+    for (const target of ["https://example.com", "//example.com", "/unknown"])
+      expect(loginDestination(target)).toBe("/");
+  });
   it("로그인 상태에 따라 헤더의 버튼을 전환할 수 있다.", async () => {
     const { wrapper } = await render(AccountActions, "/");
     expect(wrapper.find('a[href="/login"]').exists()).toBe(true);

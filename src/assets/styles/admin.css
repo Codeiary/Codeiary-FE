@@ -1,0 +1,72 @@
+.admin-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--theme-surface);
+  color: var(--theme-text);
+}
+.admin-shell a {
+  color: inherit;
+  text-decoration: none;
+}
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 88px;
+  padding: 18px 5%;
+  border-bottom: 1px solid var(--theme-border);
+}
+.admin-header-label {
+  font-size: var(--font-size-min);
+  font-weight: 650;
+  letter-spacing: 2px;
+  color: var(--theme-muted);
+  border-left: 1px solid var(--theme-border);
+  padding-left: 24px;
+}
+.admin-account {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-left: auto;
+}
+.admin-content {
+  width: 100%;
+  padding: 66px 5% 32px;
+}
+.admin-placeholder {
+  padding: 34px 0;
+}
+.admin-placeholder h1 {
+  font-size: var(--mobile-page-title-size, 28px);
+  font-weight: 550;
+  letter-spacing: -1px;
+  margin: 0 0 16px;
+}
+.admin-placeholder p {
+  color: var(--theme-muted);
+  font-size: var(--font-size-min);
+  margin: 0 0 28px;
+}
+.admin-return {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--font-size-min);
+}
+@media (max-width: 700px) {
+  .admin-header {
+    min-height: 72px;
+    padding: 16px 20px;
+    gap: 12px;
+  }
+  .admin-header-label {
+    display: none;
+  }
+  .admin-account {
+    gap: 12px;
+  }
+  .admin-content {
+    padding: 38px 20px 32px;
+  }
+}
