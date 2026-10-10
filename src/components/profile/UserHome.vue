@@ -6,7 +6,7 @@ import PostCard from "@/components/blog/PostCard.vue";
 import ProfileEditor from "@/components/profile/ProfileEditor.vue";
 import { auth } from "@/store/auth";
 import type { BlogPost } from "@/utils/blog/posts";
-import type { HomeEntry, HomeProfile } from "@/utils/profile/mock-home";
+import type { HomeEntry, HomeProfile } from "@/utils/profile/home-profile";
 import { residenceTier, type HouseLevel } from "@/utils/city/residence-tiers";
 
 const props = withDefaults(

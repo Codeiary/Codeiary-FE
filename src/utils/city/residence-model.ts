@@ -155,6 +155,27 @@ export function createResidenceModels({ box, cylinder, sphere }: Shapes) {
       for (const dx of [-0.35, 0.35])
         sphere(house, x + dx * size, y + 0.75, z, 0.48 * size, "#8caa7e");
     }
+    function gardenBed(x: number, z: number, width: number) {
+      box(house, x, 0.2, z, width, 0.4, 1.1, stone);
+      for (const offset of [-0.3, 0, 0.3])
+        sphere(house, x + offset * width, 0.72, z, 0.34, "#8caa7e");
+    }
+    function gardenLamp(x: number, z: number) {
+      cylinder(house, x, 0.75, z, 0.08, 1.5, metal);
+      sphere(house, x, 1.58, z, 0.22, "#e7d8b7");
+    }
+    function courtyardFountain(x: number, z: number) {
+      cylinder(house, x, 0.18, z, 1.2, 0.3, stone);
+      cylinder(house, x, 0.48, z, 0.72, 0.45, metal);
+      cylinder(house, x, 0.86, z, 0.28, 0.45, stone);
+      sphere(house, x, 1.18, z, 0.28, "#8bbdb7");
+    }
+    function gardenBench(x: number, z: number) {
+      box(house, x, 0.62, z, 2.2, 0.18, 0.65, trim);
+      box(house, x, 1.08, z - 0.24, 2.2, 0.72, 0.14, stone);
+      for (const side of [-1, 1])
+        box(house, x + side * 0.72, 0.3, z, 0.14, 0.6, 0.18, metal);
+    }
     function pergola(x: number, z: number, span: number) {
       for (const dx of [-span / 2, span / 2])
         for (const dz of [-1.6, 1.6])
@@ -209,28 +230,41 @@ export function createResidenceModels({ box, cylinder, sphere }: Shapes) {
       }
     }
 
-    if (level === 0 || level === 2) {
+    if (level === 0) {
       box(house, -1.8, height + 0.85, -1.2, 2.6, 1, 2.1, "#b1b9ac");
       for (let x = -2.7; x <= -0.8; x += 0.45)
         box(house, x, height + 1.38, -1.2, 0.08, 0.06, 1.6, metal, false);
-      if (level === 2)
-        for (const side of [-1, 1])
-          box(
-            house,
-            side * (width / 2 - 0.2),
-            height / 2,
-            5.65,
-            0.3,
-            height,
-            0.3,
-            trim,
-          );
+    }
+    if (level === 2) {
+      // A visible stair tower gives the first five-floor upgrade a new skyline.
+      box(house, 0, height + 1.5, -1.2, 4.8, 3, 4.2, facade);
+      box(house, 0, height + 3.08, -1.2, 5.4, 0.2, 4.8, trim);
+      box(house, 0, height + 1.65, 1.02, 2.5, 2.1, 0.08, "#526e72", false);
+      for (const side of [-1, 1])
+        box(house, side * (width / 2 - 0.2), height / 2, 5.65, 0.3, height, 0.3, trim);
     }
     if (level === 1) {
       pergola(-1.3, -1, 5.7);
       for (const x of [-3.7, 3.7]) planter(x, 0.2, 6.15);
       planter(3.8, height + 0.35, 2.8, 1.4);
       balcony(4.25, 7.8);
+    }
+    if (level >= 2) {
+      // A paved walk and planted borders grow with the house, keeping the doorway clear.
+      box(house, 0, 0.12, 8.45, 2.35, 0.16, 4.2, trim, false);
+      for (const x of [-6.35, 6.35]) gardenBed(x, 8.6, 1.35);
+    }
+    if (level >= 3) {
+      for (const x of [-3.5, 3.5]) gardenLamp(x, 9.2);
+      for (const x of [-6.35, 6.35]) gardenBed(x, 5.9, 1.35);
+    }
+    if (level >= 4) {
+      gardenBench(4.9, 7.1);
+      for (const x of [-5.2, 5.2]) planter(x, 0.2, 10.3, 1.15);
+    }
+    if (level === 5) {
+      courtyardFountain(4.8, 10.2);
+      for (const x of [-6.35, 6.35]) gardenLamp(x, 10.2);
     }
     if (level >= 3) {
       for (const x of [-width / 2 + 0.25, width / 2 - 0.25])
@@ -247,6 +281,10 @@ export function createResidenceModels({ box, cylinder, sphere }: Shapes) {
     if (level === 3) {
       pergola(-2, -1, 5.4);
       for (const z of [-3.5, 3.5]) planter(3.7, height + 0.35, z, 1.6);
+      // A broad portico and paired corner piers make the luxury tier read at street level.
+      box(house, 0, 4.35, 6.35, 10.5, 0.4, 2.4, metal);
+      for (const x of [-4.8, 4.8])
+        box(house, x, 2.75, 6.55, 0.42, 5.2, 0.42, stone);
       box(house, 2.7, height + 0.6, 0, 2.4, 0.5, 2, "#c2b394");
     }
     if (level === 4) {
@@ -255,9 +293,15 @@ export function createResidenceModels({ box, cylinder, sphere }: Shapes) {
       for (const x of [-4.5, 4.5]) planter(x, height + 0.35, 4.2, 1.3);
       for (const x of [-width / 2 + 1.1, width / 2 - 1.1])
         box(house, x, height / 2, -5.65, 0.28, height, 0.25, metal);
+      // The premium tier adds a full penthouse volume above its rooftop amenities.
+      box(house, 3.45, height + 1.55, -1.55, 5.8, 3.1, 4.8, facade);
+      box(house, 3.45, height + 1.65, 0.9, 4.8, 2.15, 0.08, "#526e72", false);
+      for (const x of [1.4, 3.45, 5.5])
+        box(house, x, height + 1.65, 0.98, 0.1, 2.4, 0.1, metal, false);
+      box(house, 3.45, height + 3.2, -1.55, 6.4, 0.22, 5.3, metal);
     }
     if (level === 5) {
-      // A penthouse, roof pool and champagne metalwork distinguish the VIP silhouette.
+      // A taller penthouse, roof pool and crown make the VIP silhouette unmistakable.
       box(house, -3.5, height + 0.6, -0.8, 4.8, 0.45, 6.6, trim);
       box(house, -3.5, height + 0.85, -0.8, 4.2, 0.06, 6, "#8bbdb7", false);
       box(house, 2.8, height + 1.9, -0.4, 5.8, 3.2, 6.4, facade);
@@ -266,6 +310,13 @@ export function createResidenceModels({ box, cylinder, sphere }: Shapes) {
       box(house, 2.8, height + 3.65, -0.4, 6.4, 0.3, 7, metal);
       for (const x of [0.4, 2.8, 5.2])
         box(house, x, height + 1.9, 2.95, 0.13, 2.7, 0.12, metal, false);
+      for (const x of [-3.8, 3.8]) {
+        box(house, x, height + 2.2, -0.8, 0.18, 4.4, 0.18, metal);
+        box(house, x, height + 4.45, -0.8, 1.2, 0.18, 0.18, metal);
+      }
+      box(house, 2.8, height + 3.65, -0.4, 6.9, 0.32, 7.4, metal);
+      box(house, 2.8, height + 4.15, -0.4, 3.3, 0.55, 3.5, facade);
+
       for (const x of [-4.7, 4.7]) planter(x, height + 0.4, 4.25, 1.35);
       const crest = box(house, 0, 4.1, 7.07, 0.65, 0.65, 0.12, metal);
       crest.rotation.z = Math.PI / 4;

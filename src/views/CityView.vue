@@ -25,21 +25,21 @@ import PostComments from "@/components/blog/comments/PostComments.vue";
 import PostLikeButton from "@/components/blog/PostLikeButton.vue";
 import { commentPostKey } from "@/utils/blog/comments";
 import { editPost } from "@/services/blog-storage";
-import { fetchPost, fetchPosts, fetchPostPage, removePost } from "@/services/blog-api";
+import { fetchMyPostCount, fetchPost, fetchPosts, fetchPostPage, removePost } from "@/services/blog-api";
 import { blogBootstrapKey, blogPageNumber, type BlogPage } from "@/utils/blog/page";
 import UserHome from "@/components/profile/UserHome.vue";
 import {
-  createMockHome,
+  createHomeProfile,
   homeBlogPosts,
   type HomeProfile,
-} from "@/utils/profile/mock-home";
+} from "@/utils/profile/home-profile";
 import "@/assets/styles/blog.css";
 import "@/assets/styles/content-window.css";
 import { useTheme } from "@/composables/useTheme";
 import { places, type Destination } from "@/utils/city/places";
 import CityLabels from "@/components/city/CityLabels.vue";
 import type { CityController, ResidenceAnchor } from "@/utils/city/world";
-import { residenceDirectory } from "@/services/mock-neighborhood";
+import { fetchNeighborhoodResidents, residenceDirectory } from "@/services/neighborhood";
 import { HOMES_PER_BLOCK, type Residence } from "@/utils/city/residences";
 import { useNeighborhood } from "@/composables/useNeighborhood";
 import NeighborhoodControls from "@/components/city/NeighborhoodControls.vue";
@@ -55,10 +55,25 @@ const initialPage = bootstrap?.url === route.fullPath.split("#")[0] ? bootstrap.
 const publicPage = shallowRef<BlogPage | undefined>(initialPage);
 const posts = shallowRef<BlogPost[]>(initialPage?.content ?? []);
 const discoveredPosts = shallowRef<BlogPost[]>(initialPage?.content ?? []);
-const directory = computed(() => residenceDirectory(user.value, discoveredPosts.value));
-const neighbors = computed(() =>
-  directory.value.filter((resident) => resident.id !== user.value?.id),
-);
+const ownPostCount = ref<number>();
+const apiResidents = shallowRef<Residence[]>([]);
+const directory = computed(() => {
+  const residents = new Map<string | number, Residence>(
+    residenceDirectory(user.value, discoveredPosts.value, ownPostCount.value)
+      .map((resident) => [resident.id, resident]),
+  );
+  for (const resident of apiResidents.value) {
+    const current = residents.get(resident.id);
+    const isCurrentUser = user.value?.id === resident.id;
+    residents.set(resident.id, current && isCurrentUser
+      ? current
+      : current
+        ? { ...current, ...resident }
+        : resident);
+  }
+  return [...residents.values()];
+});
+const neighbors = computed(() => directory.value);
 const neighborhood = useNeighborhood(neighbors);
 const {
   page: district,
@@ -81,7 +96,7 @@ const ownHouseLevel = computed(() => ownResidence.value?.level ?? 0);
 const homeProfile = computed<HomeProfile>(() => {
   const resident = visitingResident.value;
   if (!resident || resident.id === user.value?.id)
-    return createMockHome(user.value);
+    return createHomeProfile(user.value);
   return {
     owner: resident,
     email: resident.email ?? "",
@@ -734,7 +749,7 @@ function enterResidence(resident: Residence) {
 }
 async function visitResidence(resident: Residence) {
   await nextTick();
-  if (resident.id === user.value?.id) {
+  if (resident.id === user.value?.id && district.value < 0) {
     await moveDistrict(-1);
     if (error.value) void openPanel("home");
     else visit("home");
@@ -758,6 +773,19 @@ watch(neighbors, () => {
   }
   syncNeighborhood();
 });
+let ownPostsRequest = 0;
+watch(user, async (currentUser) => {
+  const request = ++ownPostsRequest;
+  ownPostCount.value = undefined;
+  if (!currentUser) return;
+  try {
+    const count = await fetchMyPostCount();
+    if (request !== ownPostsRequest || user.value?.id !== currentUser.id) return;
+    ownPostCount.value = count;
+  } catch {
+    // Keep the count from already discovered posts if the optional profile count request fails.
+  }
+}, { immediate: true });
 watch([user, ownHouseLevel], () =>
   city?.setHome(user.value ? ownHouseLevel.value : null),
 );
@@ -940,6 +968,13 @@ onMounted(() => {
   window.addEventListener("blur", releaseKeys);
   window.addEventListener("pagehide", releaseKeys);
   document.addEventListener("visibilitychange", cityVisibilityChanged);
+  void fetchNeighborhoodResidents()
+    .then((residents) => {
+      if (!unmounted) apiResidents.value = residents;
+    })
+    .catch(() => {
+      // Public post authors remain visible if the neighborhood directory is unavailable.
+    });
   if (!panel.value) void initializeCity();
 });
 onBeforeUnmount(() => {
@@ -989,7 +1024,6 @@ onBeforeUnmount(() => {
       />
       <NeighborhoodControls
         :directory="directory"
-        :viewer-id="user?.id"
         :page="district"
         :page-count="districtCount"
         :loading="districtLoading > 0"

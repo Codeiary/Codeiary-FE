@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { computed, effectScope, nextTick, shallowRef } from "vue";
 import { flushPromises } from "@vue/test-utils";
-import * as service from "@/services/mock-neighborhood";
+import * as service from "@/services/neighborhood";
 import { useNeighborhood } from "@/composables/useNeighborhood";
 import {
   residencePosition,
@@ -12,6 +12,7 @@ import {
 import {
   normalizeHouseLevel,
   residenceTier,
+  houseLevelForPostCount,
 } from "@/utils/city/residence-tiers";
 import { canWalk, findPath } from "@/utils/city/navigation";
 import {
@@ -46,29 +47,23 @@ describe("유저 집과 지연 로딩", () => {
     expect(
       [0, 1, 2, 3, 4, 5].map((level) => residenceTier(level).floors),
     ).toEqual([3, 3, 5, 5, 5, 5]);
-    expect(residenceTier(5).name).toBe("VIP 레지던스");
+    expect(residenceTier(5).name).toBe("VIP 타워");
     expect([undefined, null, NaN, -1, 8].map(normalizeHouseLevel)).toEqual([
       0, 0, 0, 0, 5,
     ]);
+    expect([0, 9, 10, 19, 20, 49, 50, 80].map(houseLevelForPostCount)).toEqual([
+      0, 0, 1, 1, 2, 4, 5, 5,
+    ]);
   });
 
-  it("게시글 수와 독립적으로 사용자의 활동 레벨을 반영할 수 있다.", () => {
+  it("게시글 수 10개마다 사용자의 집 레벨을 올릴 수 있다.", () => {
     const user = userFixture();
-    service.mockAccountProgress[user.id] = { level: 4, activityPoints: null };
-    try {
-      for (const posts of [
-        [],
-        Array.from({ length: 100 }, (_, id) => postFixture({ id })),
-      ]) {
-        const home = service
-          .residenceDirectory(user, posts)
-          .find((resident) => resident.id === user.id);
-        expect(home?.level).toBe(4);
-        expect(home?.activityPoints).toBeNull();
-      }
-    } finally {
-      delete service.mockAccountProgress[user.id];
-    }
+    const posts = Array.from({ length: 21 }, (_, id) =>
+      postFixture({ id, author: { id: user.id, name: user.name } }),
+    );
+    const home = service.residenceDirectory(user, posts, 20)
+      .find((resident) => resident.id === user.id);
+    expect(home).toMatchObject({ postCount: 20, level: 2, activityPoints: null });
   });
 
   it("사용자가 추가되면 글이 없어도 한 채의 집을 생성할 수 있다.", () => {
@@ -86,17 +81,15 @@ describe("유저 집과 지연 로딩", () => {
       service
         .residenceDirectory(user, ownPosts)
         .find((home) => home.id === user.id)?.postCount,
-    ).toBe(1);
+    ).toBe(2);
   });
 
-  it("역할과 관계없이 로그인한 사용자만 이웃 목록에서 제외할 수 있다.", () => {
-    const user = userFixture("ADMIN");
+  it("로그인한 사용자의 집도 이웃 목록에 표시할 수 있다.", () => {
+    const user = userFixture("USER");
     const directory = service.residenceDirectory(user, []);
-    const neighbors = orderedResidences(
-      directory.filter((home) => home.id !== user.id),
-    );
-    expect(neighbors.some((home) => home.id === user.id)).toBe(false);
-    expect(neighbors.some((home) => home.role === "ADMIN")).toBe(true);
+    const neighbors = orderedResidences(directory);
+    expect(neighbors.some((home) => home.id === user.id)).toBe(true);
+    expect(neighbors.some((home) => home.role === "ADMIN")).toBe(false);
     expect(orderedResidences(directory)).toHaveLength(directory.length);
   });
 
@@ -212,7 +205,9 @@ describe("유저 집과 지연 로딩", () => {
   it("현재 구역의 양옆을 미리 불러오고 재방문 시 캐시를 사용할 수 있다.", async () => {
     const request = vi.spyOn(service, "fetchNeighborhoodBlock");
     const scope = effectScope();
-    const directory = computed(() => service.residenceDirectory(null, []));
+    const directory = computed(() => service.residenceDirectory(null, Array.from({ length: 50 }, (_, id) =>
+      postFixture({ id, author: { id, name: `user-${id}` } }),
+    )));
     const neighborhood = scope.run(() => useNeighborhood(directory))!;
     try {
       await flushPromises();
@@ -238,7 +233,9 @@ describe("유저 집과 지연 로딩", () => {
   });
 
   it("사용자 목록이 바뀐 뒤 도착한 이전 구역 응답을 무시할 수 있다.", async () => {
-    const source = shallowRef(service.residenceDirectory(null, []));
+    const source = shallowRef(service.residenceDirectory(null, Array.from({ length: 20 }, (_, id) =>
+      postFixture({ id, author: { id, name: `user-${id}` } }),
+    )));
     const directory = computed(() => source.value);
     const stale = deferred<service.NeighborhoodBlock>();
     const oldBlock = await service.fetchNeighborhoodBlock(directory.value, 0);
@@ -250,7 +247,7 @@ describe("유저 집과 지연 로딩", () => {
     try {
       const first = neighborhood.ensureBlock(0);
       source.value = [
-        { ...source.value[0]!, id: "demo-most-active", activity: 999 },
+        { ...source.value[0]!, id: 999, activity: 999 },
         ...source.value,
       ];
       await nextTick();
@@ -259,7 +256,7 @@ describe("유저 집과 지연 로딩", () => {
       stale.resolve(oldBlock);
       await first;
       expect(neighborhood.visibleBlocks.value[0]).toBe(current);
-      expect(current?.residents[0]?.id).toBe("demo-most-active");
+      expect(current?.residents[0]?.id).toBe(999);
     } finally {
       scope.stop();
     }

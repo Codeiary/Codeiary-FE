@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createPost, updatePost, fetchPostPage, type PostInput } from "@/services/blog-api";
+import { createPost, updatePost, fetchPostPage, fetchMyPostCount, type PostInput } from "@/services/blog-api";
 
 const requests = vi.hoisted(() => ({ public: vi.fn(), authorized: vi.fn() }));
 vi.mock("@/services/auth-api", () => ({ createAuthApi: () => ({ request: requests.public }) }));
@@ -35,5 +35,11 @@ describe("게시글 태그 API", () => {
     const page = await fetchPostPage({ page: 0, tag: "spring" });
     expect(requests.public).toHaveBeenCalledWith("/posts?tag=spring&page=0&size=12");
     expect(page.content[0]?.tags).toEqual(input.tags);
+  });
+
+  it("내 게시글 전체 수를 작은 페이지 조회로 확인할 수 있다.", async () => {
+    requests.authorized.mockResolvedValue({ content: [], page: 0, totalPages: 24, totalElements: 237 });
+    await expect(fetchMyPostCount()).resolves.toBe(237);
+    expect(requests.authorized).toHaveBeenCalledWith("/posts/mine?page=0&size=1");
   });
 });
