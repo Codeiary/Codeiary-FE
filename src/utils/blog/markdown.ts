@@ -1,13 +1,10 @@
-import MarkdownIt from "markdown-it";
-import texmath from "markdown-it-texmath";
-import katex from "katex";
+import MarkdownIt, { type Env, type Token } from "markdown-it/browser";
 import DOMPurify from "dompurify";
 import {
   normalizeImageLayout,
   type ImageLayouts,
   type ImageSizes,
 } from "@/utils/blog/image-layout";
-import { highlightCode } from "@/utils/blog/code-highlight";
 import type { ArticleHeading } from "@/utils/blog/heading-outline";
 
 interface RenderOptions {
@@ -17,21 +14,40 @@ interface RenderOptions {
   deferAttachments?: boolean;
   imageSizes?: ImageSizes;
 }
-interface RenderEnvironment extends RenderOptions {
+interface RenderEnvironment extends RenderOptions, Env {
   images: Record<string, string>;
   imageCounts: Map<string, number>;
   headingIndex: number;
+}
+
+let highlightCode: typeof import("./code-highlight").highlightCode | undefined;
+let mathReady = false;
+let highlighting: Promise<void> | undefined;
+let math: Promise<void> | undefined;
+
+// Optional formatting never holds up the readable article.
+export function loadMarkdownFeatures(features: { code: boolean; math: boolean }) {
+  const pending: Promise<void>[] = [];
+  if (features.code && !highlightCode) {
+    highlighting ??= import("./code-highlight")
+      .then((module) => { highlightCode = module.highlightCode; })
+      .catch((error) => { highlighting = undefined; throw error; });
+    pending.push(highlighting);
+  }
+  if (features.math && !mathReady) {
+    math ??= import("./markdown-math")
+      .then((module) => { module.enableMath(markdown); mathReady = true; })
+      .catch((error) => { math = undefined; throw error; });
+    pending.push(math);
+  }
+  return pending;
 }
 
 const markdown = new MarkdownIt({
   html: false,
   linkify: true,
   breaks: true,
-  highlight: highlightCode,
-}).use(texmath, {
-  engine: katex,
-  delimiters: "dollars",
-  katexOptions: { trust: false, throwOnError: false, maxExpand: 1000 },
+  highlight: (code, language) => highlightCode?.(code, language) ?? "",
 });
 // Only images on the same Markdown line form a row. Explicit line breaks,
 // paragraphs and surrounding text keep their normal Markdown behavior.
@@ -74,8 +90,7 @@ markdown.renderer.rules.heading_open = (tokens, index, options, env, self) => {
   tokens[index]!.attrSet("id", `post-heading-${context.headingIndex++}`);
   return self.renderToken(tokens, index, options);
 };
-export function markdownHeadings(content: string): ArticleHeading[] {
-  const tokens = markdown.parse(content, {});
+function markdownHeadings(tokens: Token[]): ArticleHeading[] {
   const headings: ArticleHeading[] = [];
   let index = 0;
   for (let i = 0; i < tokens.length; i++) {
@@ -173,17 +188,30 @@ export function renderMarkdown(
   images: Record<string, string> = {},
   options: RenderOptions = {},
 ) {
-  return DOMPurify.sanitize(
-    markdown.render(content, {
-      ...options,
-      images,
-      imageCounts: new Map(),
-      headingIndex: 0,
-    }),
+  const environment: RenderEnvironment = {
+    ...options,
+    images,
+    imageCounts: new Map(),
+    headingIndex: 0,
+  };
+  const tokens = markdown.parse(content, environment);
+  const html = DOMPurify.sanitize(
+    markdown.renderer.render(tokens, markdown.options, environment),
     {
       ADD_ATTR: ["target"],
       // KaTeX emits MathML and SVG for accessible formulas. HTML input stays disabled.
       USE_PROFILES: { html: true, mathMl: true, svg: true },
     },
   );
+  return {
+    html,
+    headings: markdownHeadings(tokens),
+    features: {
+      code: tokens.some((token) => token.type === "fence" && token.info.trim()
+        && !/^(?:text|txt|plaintext)(?:\s|$)/i.test(token.info)),
+      math: tokens.some((token) => token.type.startsWith("math_")
+        || (token.type === "fence" && /^math(?:\s|$)/i.test(token.info))
+        || (token.type === "inline" && /(^|[^\\])\$(?:[^\\$]|\\.)+\$/.test(token.content))),
+    },
+  };
 }

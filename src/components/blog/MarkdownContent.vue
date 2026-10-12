@@ -7,7 +7,7 @@ import {
   ref,
   watch,
 } from "vue";
-import { markdownHeadings, renderMarkdown } from "@/utils/blog/markdown";
+import { loadMarkdownFeatures, renderMarkdown } from "@/utils/blog/markdown";
 import type { ArticleHeading } from "@/utils/blog/heading-outline";
 import { resolveImages, resolveImageSizes, saveImageSize } from "@/services/blog-storage";
 import {
@@ -16,7 +16,6 @@ import {
   type ImageSizes,
   type SelectedImage,
 } from "@/utils/blog/image-layout";
-import "katex/dist/katex.min.css";
 import "@/assets/styles/markdown.css";
 import "@/assets/styles/syntax.css";
 
@@ -31,13 +30,9 @@ const emit = defineEmits<{
   selectImage: [image: SelectedImage];
   outline: [headings: ArticleHeading[]];
 }>();
-watch(
-  () => props.content,
-  (content) => emit("outline", markdownHeadings(content)),
-  { immediate: true },
-);
 const root = ref<HTMLElement>();
 const imageSizes = ref<ImageSizes>({});
+const formattingVersion = ref(0);
 const imageError = ref(false);
 type LoadedImage = { url: string; width: number; height: number };
 const loadedImages = new Map<string, Promise<LoadedImage>>();
@@ -60,8 +55,10 @@ watch(
   },
   { immediate: true },
 );
-const html = computed(() =>
-  renderMarkdown(
+const rendered = computed(() => {
+  // Formatting libraries are loaded independently of the first body render.
+  void formattingVersion.value;
+  return renderMarkdown(
     props.content,
     {},
     {
@@ -71,7 +68,20 @@ const html = computed(() =>
       deferAttachments: true,
       imageSizes: imageSizes.value,
     },
-  ),
+  );
+});
+const html = computed(() => rendered.value.html);
+watch(
+  () => props.content,
+  (_content, _previous, onCleanup) => {
+    let stale = false;
+    onCleanup(() => { stale = true; });
+    for (const pending of loadMarkdownFeatures(rendered.value.features)) {
+      void pending.then(() => { if (!stale) formattingVersion.value++; })
+        .catch(() => { /* The article remains readable without optional formatting. */ });
+    }
+  },
+  { immediate: true },
 );
 async function hydrateImage(element: HTMLImageElement) {
   const src = element.dataset.attachmentSrc;
@@ -135,7 +145,10 @@ function observeImages() {
   );
   images.forEach((image) => observer!.observe(image));
 }
-watch(html, () => nextTick(observeImages), { flush: "post" });
+watch(rendered, (result) => {
+  emit("outline", result.headings);
+  void nextTick(observeImages);
+}, { flush: "post", immediate: true });
 onMounted(observeImages);
 onBeforeUnmount(() => observer?.disconnect());
 function selectImage(event: MouseEvent | KeyboardEvent) {
