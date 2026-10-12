@@ -4,7 +4,7 @@ export function safeAuthReturn(value: unknown) {
   if (typeof value !== "string") return "/";
   if (/^\/blog(?:\/[^/?#\\]+){0,2}(?:\?[^#\\]*)?(?:#[^\\]*)?$/.test(value))
     return value;
-  if (/^\/write(?:\/[a-f0-9-]{36})?$/.test(value) || value === "/admin")
+  if (/^\/write(?:\/[a-f0-9-]{36})?$/.test(value) || ["/admin", "/home", "/portfolio", "/news"].includes(value))
     return value;
   return "/";
 }
