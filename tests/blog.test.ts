@@ -2,13 +2,22 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createWebHistory, createRouter } from "vue-router";
-import CityApp from "@/views/CityView.vue";
+import { RouterView } from "vue-router";
 import { auth, type UserProfile } from "@/store/auth";
 import { userFixture } from "./fixtures/auth";
 import { cityRoutes } from "@/router/city-routes";
 import { blogPostsFixture, postFixture } from "./fixtures/blog";
+import { clearCityState, saveCityState, type CityState } from "@/store/city";
 
 const setHome = vi.hoisted(() => vi.fn());
+const cityLifecycle = vi.hoisted(() => ({
+  create: vi.fn(), dispose: vi.fn(), restore: vi.fn(), reset: vi.fn(), state: vi.fn(),
+}));
+const savedCity: CityState = {
+  position: { x: 12, z: 22 }, rotation: 1.2, district: -1,
+  camera: { position: [75, 85, 110], target: [-9, 0, 1], zoom: 1.1 },
+  suppressed: null, suppressedResidence: null,
+};
 const blogApiMock = vi.hoisted(() => ({
   posts: [] as import("@/utils/blog/posts").BlogPost[],
   userId: 1,
@@ -37,19 +46,33 @@ vi.mock("@/store/auth", async () => {
   const { shallowRef } = await import("vue");
   return { auth: { user: shallowRef(null) } };
 });
+vi.mock("@/services/neighborhood", async (original) => ({
+  ...await original<typeof import("@/services/neighborhood")>(),
+  fetchNeighborhoodResidents: async () => [{
+    id: 2, name: "다른 기록자", nickname: "다른 기록자", role: "USER",
+    postCount: 1, level: 0, activity: 1, activityPoints: null,
+  }],
+}));
 vi.mock("@/utils/city/world", () => ({
-  createCity: () => ({
-    setPaused: vi.fn(),
-    setNight: vi.fn(),
-    dispose: vi.fn(),
-    setInput: vi.fn(),
-    setJoystick: vi.fn(),
-    setRunning: vi.fn(),
-    setHome,
-    setNeighborhood: vi.fn(),
-    goToDistrict: vi.fn(),
-    visitResidence: vi.fn(),
-  }),
+  createCity: (...args: unknown[]) => {
+    cityLifecycle.create(...args);
+    return {
+      getState: cityLifecycle.state,
+      restoreState: cityLifecycle.restore,
+      reset: cityLifecycle.reset,
+      returnFromVisit: vi.fn(),
+      setPaused: vi.fn(),
+      setNight: vi.fn(),
+      dispose: cityLifecycle.dispose,
+      setInput: vi.fn(),
+      setJoystick: vi.fn(),
+      setRunning: vi.fn(),
+      setHome,
+      setNeighborhood: vi.fn(),
+      goToDistrict: vi.fn(),
+      visitResidence: vi.fn(),
+    };
+  },
 }));
 
 const user = auth.user as { value: UserProfile | null };
@@ -68,9 +91,9 @@ async function render() {
     ],
   });
   await router.push("/blog");
-  const wrapper = mount(CityApp, {
+  const wrapper = mount(RouterView, {
     attachTo: document.body,
-    global: { plugins: [router], stubs: { AccountActions: true } },
+    global: { plugins: [router], stubs: { AccountActions: true, PostComments: true, PostLikeButton: true } },
   });
   wrappers.push(wrapper);
   await flushPromises();
@@ -91,6 +114,9 @@ describe("블로그 글 목록", () => {
   beforeEach(() => {
     user.value = null;
     setHome.mockClear();
+    clearCityState();
+    for (const mock of Object.values(cityLifecycle)) mock.mockReset();
+    cityLifecycle.state.mockReturnValue(savedCity);
     blogApiMock.posts = blogPostsFixture();
     blogApiMock.userId = 1;
   });
@@ -99,6 +125,86 @@ describe("블로그 글 목록", () => {
       wrapper.vm.$router.options.history.destroy();
       wrapper.unmount();
     });
+  });
+
+  it("콘텐츠 페이지에는 모달과 3D 화면 없이 헤더 하나만 표시할 수 있다.", async () => {
+    const wrapper = await render();
+    for (const path of ["/blog", "/portfolio", "/news", "/home?resident=2"]) {
+      await wrapper.vm.$router.push(path);
+      await flushPromises();
+      expect(wrapper.find(".content-page main").exists()).toBe(true);
+      expect(wrapper.findAll(".site-header")).toHaveLength(1);
+      expect(wrapper.find("canvas, .modal-backdrop, [role=dialog]").exists()).toBe(false);
+    }
+    expect(cityLifecycle.create).not.toHaveBeenCalled();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushPromises();
+    expect(wrapper.vm.$router.currentRoute.value.path).toBe("/home");
+  });
+
+  it("페이지로 이동할 때 지도를 정리하고 뒤로가면 위치와 카메라를 복원할 수 있다.", async () => {
+    const wrapper = await render();
+    await wrapper.vm.$router.push("/");
+    await flushPromises();
+    expect(cityLifecycle.create).toHaveBeenCalledOnce();
+    expect(wrapper.find("canvas").exists()).toBe(true);
+    await wrapper.get(".site-header nav > button").trigger("click");
+    await flushPromises();
+    expect(cityLifecycle.dispose).toHaveBeenCalledOnce();
+    expect(wrapper.find("canvas").exists()).toBe(false);
+    wrapper.vm.$router.back();
+    await flushPromises();
+    expect(cityLifecycle.create).toHaveBeenCalledTimes(2);
+    expect(cityLifecycle.restore).toHaveBeenLastCalledWith(savedCity);
+    await wrapper.vm.$router.push("/news");
+    await flushPromises();
+    expect(cityLifecycle.dispose).toHaveBeenCalledTimes(2);
+  });
+
+  it("저장한 이웃 지도를 복원하고 로고를 누르면 초기 지도로 돌아갈 수 있다.", async () => {
+    const wrapper = await render();
+    const state = { ...savedCity, position: { x: 160, z: 12 }, district: 0 };
+    saveCityState(state);
+    await wrapper.vm.$router.push("/");
+    await flushPromises();
+    expect(cityLifecycle.restore).toHaveBeenLastCalledWith(state);
+    await wrapper.get('[aria-label="Codeiary 홈으로"]').trigger("click");
+    await flushPromises();
+    expect(cityLifecycle.reset).toHaveBeenCalledOnce();
+    await wrapper.vm.$router.push("/portfolio");
+    await flushPromises();
+    cityLifecycle.restore.mockClear();
+    await wrapper.get('[aria-label="Codeiary 홈으로"]').trigger("click");
+    await flushPromises();
+    expect(cityLifecycle.restore).not.toHaveBeenCalled();
+    expect(wrapper.find("canvas").exists()).toBe(true);
+  });
+
+  it("기존 콘텐츠 주소를 새 페이지 주소로 연결할 수 있다.", async () => {
+    const wrapper = await render();
+    for (const view of ["portfolio", "news", "home", "blog"]) {
+      await wrapper.vm.$router.push(`/?view=${view}&resident=2`);
+      await flushPromises();
+      expect(wrapper.vm.$router.currentRoute.value.fullPath).toBe(`/${view}?resident=2`);
+      expect(wrapper.find("canvas").exists()).toBe(false);
+    }
+  });
+
+  it("지도를 다녀온 뒤 블로그 목록의 스크롤 위치를 복원할 수 있다.", async () => {
+    const wrapper = await render();
+    const list = wrapper.get(".window-body");
+    list.element.scrollTop = 320;
+    await list.trigger("scroll");
+    await wrapper.vm.$router.push("/");
+    await flushPromises();
+    wrapper.vm.$router.back();
+    await flushPromises();
+    const restoredList = wrapper.get(".window-body").element;
+    Object.defineProperties(restoredList, {
+      scrollHeight: { value: 1200, configurable: true },
+      clientHeight: { value: 400, configurable: true },
+    });
+    await vi.waitFor(() => expect(restoredList.scrollTop).toBe(320));
   });
 
   it("비로그인 사용자는 내 블로그 버튼 없이 발행된 글만 볼 수 있다.", async () => {
@@ -363,14 +469,14 @@ describe("블로그 글 목록", () => {
     expect(wrapper.get("#content-panel-title").text()).toBe("Blog House");
   });
 
-  it("창을 닫고 다시 열면 이전 방문 기록을 초기화할 수 있다.", async () => {
+  it("홈으로 이동한 뒤 블로그 목록을 다시 열 수 있다.", async () => {
     user.value = userFixture("USER");
     const wrapper = await render();
     await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
     await flushPromises();
     await wrapper.findAll(".post-open")[1]!.trigger("click");
     await flushPromises();
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await wrapper.get('[aria-label="Codeiary 홈으로"]').trigger("click");
     await flushPromises();
     await wrapper
       .findAll(".site-header:not([inert]) nav > button")[0]!
