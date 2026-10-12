@@ -7,6 +7,7 @@ import { fetchPost, fetchPosts, fetchMyPostCount, updatePost } from "@/services/
 import { fetchNeighborhoodResidents } from "@/services/neighborhood";
 import { rememberSavedPost, takeSavedPost } from "@/store/saved-post";
 import { AuthError } from "@/services/auth-api";
+import * as markdownLoader from "@/utils/blog/markdown-loader";
 import { auth, type UserProfile } from "@/store/auth";
 import { userFixture } from "./fixtures/auth";
 import { cityRoutes } from "@/router/city-routes";
@@ -132,6 +133,90 @@ describe("블로그 글 목록", () => {
       wrapper.vm.$router.options.history.destroy();
       wrapper.unmount();
     });
+  });
+
+  it("선택하려는 글을 미리 불러오고 클릭할 때 진행 중인 요청을 재사용할 수 있다.", async () => {
+    const post = postFixture({ content: "미리 요청한 본문" });
+    blogApiMock.posts = [post];
+    const wrapper = await render();
+    const renderer = vi.spyOn(markdownLoader, "loadMarkdownContent");
+    let resolve!: (post: ReturnType<typeof postFixture>) => void;
+    vi.mocked(fetchPost).mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    const link = wrapper.get(".post-open");
+    await link.trigger("focus");
+    await link.trigger("pointerdown");
+    expect(fetchPost).toHaveBeenCalledExactlyOnceWith(post.id);
+    expect(renderer).toHaveBeenCalled();
+    expect(wrapper.find(".article-body").exists()).toBe(false);
+
+    await link.trigger("click");
+    await flushPromises();
+    expect(fetchPost).toHaveBeenCalledTimes(1);
+    resolve(post);
+    await flushPromises();
+    await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("미리 요청한 본문"));
+  });
+
+  it("바로 클릭해도 본문 응답을 기다리지 않고 렌더러를 준비할 수 있다.", async () => {
+    const post = postFixture({ content: "동시에 준비한 본문" });
+    blogApiMock.posts = [post];
+    const wrapper = await render();
+    const renderer = vi.spyOn(markdownLoader, "loadMarkdownContent");
+    let resolve!: (post: ReturnType<typeof postFixture>) => void;
+    vi.mocked(fetchPost).mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
+    expect(renderer).toHaveBeenCalled();
+    expect(fetchPost).toHaveBeenCalledExactlyOnceWith(post.id);
+    resolve(post);
+    await flushPromises();
+    await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("동시에 준비한 본문"));
+  });
+
+  it.each(["만료", "계정 변경"])("%s 후에는 이전에 준비한 본문을 재사용하지 않을 수 있다.", async (reason) => {
+    blogApiMock.posts = [postFixture({ content: "이전 본문" })];
+    const wrapper = await render();
+    await wrapper.get(".post-open").trigger("focus");
+    await flushPromises();
+    if (reason === "만료") vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31_000);
+    else {
+      user.value = userFixture("USER");
+      await flushPromises();
+    }
+    vi.mocked(fetchPost).mockResolvedValueOnce(postFixture({ content: "새로 확인한 본문" }));
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
+    expect(fetchPost).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("새로 확인한 본문"));
+    expect(wrapper.get(".article-body").text()).not.toContain("이전 본문");
+  });
+
+  it("미리 불러오기가 실패해도 목록을 유지하고 실제로 열 때 다시 조회할 수 있다.", async () => {
+    blogApiMock.posts = [postFixture()];
+    const wrapper = await render();
+    vi.mocked(fetchPost).mockRejectedValueOnce(new AuthError(0, "NETWORK_ERROR", "network error"));
+    await wrapper.get(".post-open").trigger("focus");
+    await flushPromises();
+    expect(wrapper.find(".blog-storage-error").exists()).toBe(false);
+    vi.mocked(fetchPost).mockResolvedValueOnce(postFixture({ content: "다시 조회한 본문" }));
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
+    expect(fetchPost).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("다시 조회한 본문"));
+  });
+
+  it("비공개 글은 미리 조회하지 않고 실제로 열 때 조회할 수 있다.", async () => {
+    user.value = userFixture("USER");
+    blogApiMock.posts = [postFixture({ visibility: "PRIVATE", content: "비공개 본문" })];
+    const wrapper = await render();
+    await wrapper.vm.$router.push("/blog/기록자");
+    await flushPromises();
+    await wrapper.get(".post-open").trigger("focus");
+    expect(fetchPost).not.toHaveBeenCalled();
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
+    expect(fetchPost).toHaveBeenCalledExactlyOnceWith(1);
+    await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("비공개 본문"));
   });
 
   it("수정 응답으로 새 제목과 본문을 재조회 없이 바로 표시할 수 있다.", async () => {
