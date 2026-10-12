@@ -20,7 +20,7 @@ export function useNeighborhood(directory: ComputedRef<Residence[]>) {
   const pageCount = computed(() =>
     Math.ceil(residents.value.length / HOMES_PER_BLOCK),
   );
-  // Only the current and adjacent blocks own GPU objects.
+  // Show the current and adjacent blocks; the renderer caches recent hidden blocks.
   const visibleBlocks = computed(() =>
     [...cache.value.values()].filter(
       (block) => Math.abs(block.page - page.value) <= 1,

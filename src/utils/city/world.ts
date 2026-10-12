@@ -83,7 +83,7 @@ export function createCity(
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.18;
@@ -1038,7 +1038,6 @@ export function createCity(
   const districts = new Map<
     number,
     {
-      source: NeighborhoodBlock;
       group: THREE.Group;
       homes: ResidentBuilding[];
       vehicles: { model: THREE.Group; direction: number; slot: number }[];
@@ -1550,7 +1549,6 @@ export function createCity(
     });
     instanceStaticMeshes(scenery);
     return {
-      source: block,
       group,
       homes,
       vehicles,
@@ -1569,11 +1567,8 @@ export function createCity(
       surface.scale.x = residentialWidth;
     }
     water.position.x = RESIDENTIAL_START + totalDistricts * BLOCK_WIDTH + 80;
-    for (const [page, district] of districts) {
-      if (
-        blocks.some((block) => block.page === page && block === district.source)
-      )
-        continue;
+    function removeDistrict(page: number) {
+      const district = districts.get(page)!;
       scene.remove(district.group);
       district.obstacles.forEach((obstacle) => {
         const index = obstacles.indexOf(obstacle);
@@ -1587,10 +1582,32 @@ export function createCity(
       district.group.clear();
       districts.delete(page);
     }
-    for (const block of blocks)
-      if (!districts.has(block.page))
-        districts.set(block.page, buildDistrict(block));
-    activeHomes = [...districts.values()].flatMap((district) => district.homes);
+    const visible = new Set(blocks.map((block) => block.page));
+    for (const [page, district] of districts) {
+      if (page >= totalDistricts) removeDistrict(page);
+      else district.group.visible = visible.has(page);
+    }
+    for (const block of blocks) {
+      let district = districts.get(block.page);
+      // Profile/count refreshes do not change geometry unless a house levels up.
+      if (district && (district.homes.length !== block.residents.length
+        || district.homes.some((home, slot) =>
+          home.house.userData.houseLevel !== normalizeHouseLevel(block.residents[slot]!.level)))) {
+        removeDistrict(block.page);
+        district = undefined;
+      }
+      district ??= buildDistrict(block);
+      district.homes.forEach((home, slot) => { home.resident = block.residents[slot]!; });
+      district.group.visible = true;
+      districts.delete(block.page);
+      districts.set(block.page, district);
+    }
+    // Keep three visible districts and at most two recent districts for backtracking.
+    for (const [page, district] of districts) {
+      if (districts.size <= 5) break;
+      if (!district.group.visible) removeDistrict(page);
+    }
+    activeHomes = blocks.flatMap((block) => districts.get(block.page)?.homes ?? []);
     renderPaused();
   }
 
@@ -1604,7 +1621,7 @@ export function createCity(
   function walkable(point: Point) {
     if (point.x >= RESIDENTIAL_START && point.x <= walkBounds().maxX) {
       const page = Math.floor((point.x - RESIDENTIAL_START) / BLOCK_WIDTH);
-      if (!districts.has(page)) {
+      if (!districts.get(page)?.group.visible) {
         handlers.requestDistrict(page);
         return false;
       }
@@ -1982,6 +1999,7 @@ export function createCity(
       }
     }
     for (const [page, district] of districts) {
+      if (!district.group.visible) continue;
       const start = RESIDENTIAL_START + page * BLOCK_WIDTH;
       for (const vehicle of district.vehicles) {
         const speed = vehicle.direction > 0 ? 4.4 : 3.8;
@@ -1999,6 +2017,7 @@ export function createCity(
       }
     }
     for (const [page, district] of districts) {
+      if (!district.group.visible) continue;
       const start = RESIDENTIAL_START + page * BLOCK_WIDTH;
       district.pedestrians.forEach((pedestrian, index) => {
         const length = BLOCK_WIDTH - 12;
