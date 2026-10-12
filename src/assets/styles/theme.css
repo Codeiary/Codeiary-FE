@@ -164,9 +164,6 @@
 :root[data-theme="dark"] .news-number {
   color: #7b938a;
 }
-:root[data-theme="dark"] .modal-backdrop {
-  background: #0b172aba;
-}
 :root[data-theme="dark"] .window-body,
 :root[data-theme="dark"] .article-body {
   scrollbar-color: #526760 transparent;
