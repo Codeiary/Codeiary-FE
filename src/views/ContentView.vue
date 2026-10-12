@@ -16,6 +16,7 @@ import SiteHeader from "@/components/SiteHeader.vue";
 import ContentActions from "@/components/ContentActions.vue";
 import { auth } from "@/store/auth";
 import { takeSavedPost } from "@/store/saved-post";
+import { loadMarkdownContent } from "@/utils/blog/markdown-loader";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 import { authorSlug, postSlug } from "@/utils/blog/slug";
 import BlogPostList from "@/components/blog/BlogPostList.vue";
@@ -55,6 +56,26 @@ let savedArticle = import.meta.env.SSR ? undefined : takeSavedPost(navigationPos
 if (savedArticle && !matchesArticle(savedArticle)) savedArticle = undefined;
 const article = shallowRef<BlogPost | null>(null);
 const articleLoading = ref(false);
+// Keep only the intended next public article, scoped to the current account.
+let prefetchedArticle: {
+  id: number;
+  userId: number | undefined;
+  at: number;
+  result: Promise<BlogPost>;
+} | undefined;
+function prefetchArticle(id: number) {
+  void loadMarkdownContent().catch(() => {});
+  const post = posts.value.find((post) => post.id === id);
+  if (!post?.author || post.visibility === "PRIVATE") return;
+  if (prefetchedArticle?.id === id && prefetchedArticle.userId === user.value?.id
+    && Date.now() - prefetchedArticle.at < 30_000) return;
+  const result = fetchPost(id);
+  prefetchedArticle = { id, userId: user.value?.id, at: Date.now(), result };
+  // Ignore speculative failures so opening the article can try again.
+  void result.catch(() => {
+    if (prefetchedArticle?.result === result) prefetchedArticle = undefined;
+  });
+}
 const bootstrap = inject(blogBootstrapKey, undefined);
 const initialPage = bootstrap?.url === route.fullPath.split("#")[0] ? bootstrap.page : undefined;
 const publicPage = shallowRef<BlogPage | undefined>(initialPage);
@@ -377,6 +398,8 @@ watch(
     articleLoading.value = false;
     article.value = null;
     if (!route.params.postSlug) return;
+    // Fetch the renderer alongside the API, not after the body has arrived.
+    void loadMarkdownContent().catch(() => {});
     const candidate = scopedPosts.value.find(matchesArticle);
     const id = navigationPostId() ?? candidate?.id;
     if (!id) return;
@@ -387,7 +410,10 @@ watch(
     }
     articleLoading.value = true;
     try {
-      const completePost = await fetchPost(id);
+      const pending = prefetchedArticle;
+      prefetchedArticle = undefined;
+      const completePost = await (pending?.id === id && pending.userId === user.value?.id
+        && Date.now() - pending.at < 30_000 ? pending.result : fetchPost(id));
       if (request === articleRequest && matchesArticle(completePost)) article.value = completePost;
     } catch (error) {
       if (request === articleRequest && !(error instanceof AuthError && error.status === 404)) {
@@ -575,6 +601,7 @@ async function continueEditing() {
 watch(
   () => user.value?.id,
   (_userId, previousUserId) => {
+    prefetchedArticle = undefined;
     postPageCache.clear();
     catalogCache.clear();
     blogLocations.clear();
@@ -601,6 +628,7 @@ watch(() => route.fullPath, (path, previous) => {
 onBeforeRouteLeave((_to, from) => { saveCurrentScroll(from.fullPath); });
 onBeforeUnmount(() => {
   cancelAnimationFrame(scrollRestoreFrame);
+  prefetchedArticle = undefined;
   postsRequest++;
   articleRequest++;
 });
@@ -683,6 +711,7 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
         "
         @blog="openAuthorBlog(homeProfile.owner)"
         @post="openPost"
+        @prefetch="prefetchArticle"
       />
       <div v-else-if="section === 'home' && residentsLoaded" class="window-body">
         <div class="empty-state">
@@ -799,6 +828,7 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
               updateBlogQuery('sort', $event === 'latest' ? '' : $event)
             "
             @open="openArticle"
+            @prefetch="prefetchArticle"
             @author="openAuthorBlog"
             @like="refreshLikeSort"
             @write="startWriting()"

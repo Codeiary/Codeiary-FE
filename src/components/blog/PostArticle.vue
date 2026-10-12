@@ -5,14 +5,13 @@ import { defineAsyncComponent, ref } from "vue";
 import Icon from "@/components/Icon.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
 import ArticleOutline from "@/components/blog/ArticleOutline.vue";
+import { loadMarkdownContent } from "@/utils/blog/markdown-loader";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 import type { SelectedImage } from "@/utils/blog/image-layout";
 import type { ArticleHeading } from "@/utils/blog/heading-outline";
 import "@/assets/styles/blog.css";
 
-const MarkdownContent = defineAsyncComponent(
-  () => import("@/components/blog/MarkdownContent.vue"),
-);
+const MarkdownContent = defineAsyncComponent(loadMarkdownContent);
 withDefaults(
   defineProps<{
     post: Pick<

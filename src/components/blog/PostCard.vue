@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount } from "vue";
 import { displayName } from "@/utils/profile/display-name";
 import Icon from "@/components/Icon.vue";
 import CoverImage from "@/components/blog/CoverImage.vue";
@@ -7,12 +8,27 @@ import PostLikeButton from "@/components/blog/PostLikeButton.vue";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 import { authorSlug, postSlug } from "@/utils/blog/slug";
 
-defineProps<{ post: BlogPost; compact?: boolean }>();
+const props = defineProps<{ post: BlogPost; compact?: boolean }>();
 const emit = defineEmits<{
   open: [id: number];
+  prefetch: [id: number];
   author: [author: BlogAuthor];
   like: [];
 }>();
+
+let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+function cancelPrefetch() {
+  clearTimeout(hoverTimer);
+}
+function prefetch() {
+  cancelPrefetch();
+  emit("prefetch", props.post.id);
+}
+function hoverPost() {
+  cancelPrefetch();
+  hoverTimer = setTimeout(prefetch, 120);
+}
+onBeforeUnmount(cancelPrefetch);
 
 function openPost(event: MouseEvent, id: number) {
   if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -27,6 +43,10 @@ function openPost(event: MouseEvent, id: number) {
       class="post-open"
       :href="post.author ? `/blog/${encodeURIComponent(authorSlug(post.author.name))}/${encodeURIComponent(post.slug || postSlug(post.title))}` : undefined"
       :aria-label="`${post.title} 글 보기`"
+      @pointerenter="hoverPost"
+      @pointerleave="cancelPrefetch"
+      @focus="prefetch"
+      @pointerdown="prefetch"
       @click="openPost($event, post.id)"
     >
       <div class="post-art">

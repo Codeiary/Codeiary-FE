@@ -29,6 +29,7 @@ defineEmits<{
   "update:sort": [value: "latest" | "likes"];
   "update:page": [value: number];
   open: [id: number];
+  prefetch: [id: number];
   author: [author: BlogAuthor];
   like: [];
   write: [];
@@ -109,6 +110,7 @@ const visiblePosts = computed(() => {
           :post="post"
           :compact="personal"
           @open="$emit('open', $event)"
+          @prefetch="$emit('prefetch', $event)"
           @author="$emit('author', $event)"
           @like="$emit('like')"
         />
