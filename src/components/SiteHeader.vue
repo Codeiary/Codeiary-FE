@@ -1,21 +1,27 @@
 <script setup lang="ts">
-import { ref, useId, watch } from "vue";
-import { useRoute } from "vue-router";
+import { computed, ref, useId, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import BrandLogo from "@/components/BrandLogo.vue";
 import AccountActions from "@/components/AccountActions.vue";
 import Icon from "@/components/Icon.vue";
 import type { Destination } from "@/utils/city/places";
+import { auth } from "@/store/auth";
+import { clearCityState } from "@/store/city";
 
 const props = defineProps<{
-  items: readonly { id: Destination; name: string }[];
   active?: Destination | null;
-  inactive?: boolean;
 }>();
 const emit = defineEmits<{
-  navigate: [id: Destination];
   home: [];
 }>();
 const route = useRoute();
+const router = useRouter();
+const items = computed<{ id: Destination; name: string }[]>(() => [
+  { id: "blog", name: "블로그" },
+  { id: "portfolio", name: "포트폴리오" },
+  { id: "news", name: "최근 IT 이슈" },
+  ...(auth.user.value ? [{ id: "home" as const, name: "내 집" }] : []),
+]);
 const navigationId = `site-navigation-${useId()}`;
 const menuOpen = ref(false);
 const menuButton = ref<HTMLButtonElement>();
@@ -25,11 +31,13 @@ function closeMenu() {
 }
 function navigate(id: Destination) {
   menuOpen.value = false;
-  emit("navigate", id);
+  void router.push({ name: id === "home" ? "user-home" : id });
 }
 function goHome() {
   menuOpen.value = false;
+  clearCityState();
   emit("home");
+  void router.push({ name: "city" });
 }
 function handleEscape(event: KeyboardEvent) {
   if (!menuOpen.value) return;
@@ -46,7 +54,6 @@ watch(
   <header
     class="site-header"
     :class="{ 'site-header-content': Boolean(props.active) }"
-    :inert="inactive"
     @keydown.esc="handleEscape"
   >
     <button class="brand" aria-label="Codeiary 홈으로" @click="goHome">

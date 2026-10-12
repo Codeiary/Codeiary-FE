@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { CityState } from "@/store/city";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { createResidenceModels } from "./residence-model";
@@ -49,10 +50,10 @@ export interface CityHandlers {
 }
 export interface CityController {
   visit: (id: Destination) => boolean;
-  getPlayerPosition: () => Point;
-  setPlayerPosition: (position: Point) => void;
+  getState: () => CityState;
+  restoreState: (state: CityState) => void;
   setNight: (night: boolean) => void;
-  resetCamera: () => void;
+  reset: () => void;
   returnFromVisit: () => void;
   setInput: (key: string, pressed: boolean) => void;
   setJoystick: (direction: Point) => void;
@@ -2084,20 +2085,41 @@ export function createCity(
 
   return {
     visit,
-    getPlayerPosition() {
-      return { x: player.group.position.x, z: player.group.position.z };
-    },
-    setPlayerPosition(position) {
-      if (!Number.isFinite(position.x) || !Number.isFinite(position.z)) return;
-      const target = {
-        x: Math.max(WORLD_BOUNDS.minX, Math.min(WORLD_BOUNDS.maxX, position.x)),
-        z: Math.max(WORLD_BOUNDS.minZ, Math.min(WORLD_BOUNDS.maxZ, position.z)),
+    getState() {
+      const position = player.group.position;
+      return {
+        position: { x: position.x, z: position.z },
+        rotation: player.group.rotation.y,
+        district: position.x < RESIDENTIAL_START ? -1
+          : Math.floor((position.x - RESIDENTIAL_START) / BLOCK_WIDTH),
+        camera: {
+          position: camera.position.toArray(),
+          target: controls.target.toArray(),
+          zoom: camera.zoom,
+        },
+        suppressed,
+        suppressedResidence,
       };
-      if (!canWalk(target, obstacles, WORLD_BOUNDS)) return;
-      player.group.position.set(target.x, 0.3, target.z);
+    },
+    restoreState(state) {
+      if (state.district >= 0 && !districts.has(state.district)) return;
+      if (!canWalk(state.position, obstacles, walkBounds())) return;
+      player.group.position.set(state.position.x, 0.3, state.position.z);
+      player.group.rotation.y = state.rotation;
+      currentDistrict = state.district;
+      viewTarget.copy(state.district < 0 ? (mobileViewport ? mobileTarget : initialTarget)
+        : new THREE.Vector3(RESIDENTIAL_START + state.district * BLOCK_WIDTH + 50, 0, 12));
+      camera.position.fromArray(state.camera.position);
+      controls.target.fromArray(state.camera.target);
+      camera.zoom = THREE.MathUtils.clamp(state.camera.zoom, controls.minZoom, controls.maxZoom);
+      camera.updateProjectionMatrix();
+      controls.update();
+      suppressed = state.suppressed;
+      suppressedResidence = state.suppressedResidence;
       route = [];
       routeDestination = null;
       routeResidence = null;
+      handlers.districtChanged(currentDistrict);
       renderPaused();
     },
     setNeighborhood,
@@ -2152,12 +2174,20 @@ export function createCity(
       }
       renderPaused();
     },
-    resetCamera() {
+    reset() {
+      goToDistrict(-1);
+      currentDistrict = -1;
+      returnPosition = null;
+      suppressed = null;
+      player.group.rotation.y = 0;
+      viewTarget.copy(mobileViewport ? mobileTarget : initialTarget);
       camera.position.copy(viewTarget).add(new THREE.Vector3(78, 88, 100));
       controls.target.copy(viewTarget);
       camera.zoom = defaultZoom();
       camera.updateProjectionMatrix();
       controls.update();
+      handlers.districtChanged(-1);
+      renderPaused();
     },
     returnFromVisit() {
       if (!returnPosition) return;
@@ -2169,8 +2199,6 @@ export function createCity(
       route = [];
       routeDestination = null;
       routeResidence = null;
-      suppressed = null;
-      suppressedResidence = null;
     },
     setInput(key, pressed) {
       if (pressed) keys.add(key);
@@ -2249,6 +2277,7 @@ export function createCity(
       textures.forEach((t) => t.dispose());
       landmarks.dispose();
       renderer.dispose();
+      renderer.forceContextLoss();
     },
   };
 }
