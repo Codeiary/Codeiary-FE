@@ -15,6 +15,7 @@ import Icon from "@/components/Icon.vue";
 import SiteHeader from "@/components/SiteHeader.vue";
 import ContentActions from "@/components/ContentActions.vue";
 import { auth } from "@/store/auth";
+import { takeSavedPost } from "@/store/saved-post";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 import { authorSlug, postSlug } from "@/utils/blog/slug";
 import BlogPostList from "@/components/blog/BlogPostList.vue";
@@ -24,7 +25,8 @@ import PostComments from "@/components/blog/comments/PostComments.vue";
 import PostLikeButton from "@/components/blog/PostLikeButton.vue";
 import { commentPostKey } from "@/utils/blog/comments";
 import { editPost } from "@/services/blog-storage";
-import { fetchPost, fetchPosts, fetchPostPage, removePost } from "@/services/blog-api";
+import { fetchPost, fetchPosts, fetchPostPage, removePost, type PostLikeState } from "@/services/blog-api";
+import { AuthError } from "@/services/auth-api";
 import { blogBootstrapKey, blogPageNumber, type BlogPage } from "@/utils/blog/page";
 import UserHome from "@/components/profile/UserHome.vue";
 import {
@@ -39,15 +41,29 @@ import { useResidenceDirectory } from "@/composables/useResidenceDirectory";
 const route = useRoute();
 const router = useRouter();
 const { user } = auth;
+function navigationPostId() {
+  const id = router.options.history.state.postId;
+  return route.name === "blog-post" && typeof id === "number" && Number.isSafeInteger(id) && id > 0
+    ? id : undefined;
+}
+function matchesArticle(post: BlogPost) {
+  return post.author &&
+    (authorSlug(post.author.name) === route.params.authorSlug || String(post.author.id) === route.params.authorSlug) &&
+    (post.slug || postSlug(post.title)) === route.params.postSlug;
+}
+let savedArticle = import.meta.env.SSR ? undefined : takeSavedPost(navigationPostId(), user.value?.id);
+if (savedArticle && !matchesArticle(savedArticle)) savedArticle = undefined;
+const article = shallowRef<BlogPost | null>(null);
+const articleLoading = ref(false);
 const bootstrap = inject(blogBootstrapKey, undefined);
 const initialPage = bootstrap?.url === route.fullPath.split("#")[0] ? bootstrap.page : undefined;
 const publicPage = shallowRef<BlogPage | undefined>(initialPage);
-const posts = shallowRef<BlogPost[]>(initialPage?.content ?? []);
+const posts = shallowRef<BlogPost[]>(savedArticle ? [savedArticle] : initialPage?.content ?? []);
 const discoveredPosts = shallowRef<BlogPost[]>(initialPage?.content ?? []);
 const section = computed(() => route.meta.section as Destination);
 const { directory, ownResidence, ownHouseLevel, loaded: residentsLoaded } = useResidenceDirectory(
   discoveredPosts,
-  computed(() => section.value === "home" || Boolean(route.params.authorSlug)),
+  computed(() => section.value === "home" || route.name === "user-blog"),
 );
 const pageElement = ref<HTMLElement>();
 const selectedProject = ref<number | null>(null);
@@ -100,14 +116,12 @@ async function loadBlogPosts() {
   const isPublicList = route.name === "blog";
   const isArticle = route.name === "blog-post";
   const needsCatalog = route.name === "user-blog" || section.value === "home"
-    || (isArticle && !posts.value.some((post) => post.author &&
-      authorSlug(post.author.name) === route.params.authorSlug &&
-      (post.slug || postSlug(post.title)) === route.params.postSlug));
+    || (isArticle && !navigationPostId() && !posts.value.some(matchesArticle));
+  storageError.value = "";
   if (!isPublicList && !needsCatalog) {
     postsLoading.value = false;
     return;
   }
-  storageError.value = "";
   try {
     if (isPublicList) {
       const params = {
@@ -297,6 +311,7 @@ const blogOwner = computed(() => {
   )
     return user.value;
   return (
+    (article.value && matchesArticle(article.value) ? article.value.author : null) ??
     posts.value.find(
       (post) =>
         post.author &&
@@ -349,34 +364,35 @@ const scopedPosts = computed(() =>
     );
   }),
 );
-const article = shallowRef<BlogPost | null>(null);
-const articleLoading = ref(false);
 let articleRequest = 0;
 watch(
   () => [
     route.params.authorSlug,
     route.params.postSlug,
     posts.value,
+    user.value?.id,
   ],
   async () => {
     const request = ++articleRequest;
     articleLoading.value = false;
     article.value = null;
     if (!route.params.postSlug) return;
-    const candidate = scopedPosts.value.find(
-      (post) =>
-        post.author &&
-        (authorSlug(post.author.name) === route.params.authorSlug ||
-          String(post.author.id) === route.params.authorSlug) &&
-        (post.slug || postSlug(post.title)) === route.params.postSlug,
-    );
-    if (!candidate) return;
+    const candidate = scopedPosts.value.find(matchesArticle);
+    const id = navigationPostId() ?? candidate?.id;
+    if (!id) return;
+    if (savedArticle?.id === id && matchesArticle(savedArticle)) {
+      article.value = savedArticle;
+      savedArticle = undefined;
+      return;
+    }
     articleLoading.value = true;
     try {
-      const completePost = await fetchPost(candidate.id);
-      if (request === articleRequest) article.value = completePost;
-    } catch {
-      if (request === articleRequest) article.value = candidate;
+      const completePost = await fetchPost(id);
+      if (request === articleRequest && matchesArticle(completePost)) article.value = completePost;
+    } catch (error) {
+      if (request === articleRequest && !(error instanceof AuthError && error.status === 404)) {
+        storageError.value = error instanceof Error ? error.message : "게시글을 불러오지 못했어요.";
+      }
     } finally {
       if (request === articleRequest) articleLoading.value = false;
     }
@@ -384,7 +400,8 @@ watch(
   { immediate: true },
 );
 const canDeleteArticle = computed(() => Boolean(user.value && isOwnBlog.value && article.value?.author?.id === user.value.id));
-function refreshLikeSort() {
+function refreshLikeSort(likes?: PostLikeState) {
+  if (article.value && likes) article.value = { ...article.value, ...likes };
   postPageCache.clear();
   catalogCache.clear();
   if (route.name === "blog" && postSort.value === "likes") {
@@ -439,6 +456,7 @@ function blogRouteTarget(target: Exclude<RouteLocationRaw, string>) {
   return router.push({
     ...target,
     state: {
+      ...target.state,
       blogPrevious:
         isBlogRoute.value || section.value === "home" ? route.fullPath : null,
     },
@@ -461,6 +479,7 @@ function openPost(post: BlogPost) {
       authorSlug: authorSlug(post.author.name),
       postSlug: post.slug || postSlug(post.title),
     },
+    state: { postId: post.id },
   });
 }
 function selectBlogScope(scope: "all" | "mine") {
