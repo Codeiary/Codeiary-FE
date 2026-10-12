@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createWebHistory, createRouter } from "vue-router";
 import { RouterView } from "vue-router";
+import { fetchPost, fetchPosts, fetchMyPostCount, updatePost } from "@/services/blog-api";
+import { fetchNeighborhoodResidents } from "@/services/neighborhood";
+import { rememberSavedPost, takeSavedPost } from "@/store/saved-post";
+import { AuthError } from "@/services/auth-api";
 import { auth, type UserProfile } from "@/store/auth";
 import { userFixture } from "./fixtures/auth";
 import { cityRoutes } from "@/router/city-routes";
@@ -31,15 +35,16 @@ vi.mock("@/services/blog-api", () => ({
     });
     return { content: posts.slice(page * 12, (page + 1) * 12), page, totalPages: Math.ceil(posts.length / 12), totalElements: posts.length };
   },
-  fetchPosts: async ({ mine }: { mine?: boolean } = {}) =>
+  fetchPosts: vi.fn(async ({ mine }: { mine?: boolean } = {}) =>
     blogApiMock.posts.filter((post) =>
       mine
         ? post.author?.id === blogApiMock.userId
         : post.visibility !== "PRIVATE",
-    ),
-  fetchMyPostCount: async () => blogApiMock.posts.filter((post) => post.author?.id === blogApiMock.userId).length,
-  fetchPost: async (id: number) =>
-    blogApiMock.posts.find((post) => post.id === id),
+    )),
+  fetchMyPostCount: vi.fn(async () => blogApiMock.posts.filter((post) => post.author?.id === blogApiMock.userId).length),
+  fetchPost: vi.fn(async (id: number) =>
+    blogApiMock.posts.find((post) => post.id === id)),
+  updatePost: vi.fn(),
   removePost: vi.fn(),
 }));
 vi.mock("@/store/auth", async () => {
@@ -48,10 +53,10 @@ vi.mock("@/store/auth", async () => {
 });
 vi.mock("@/services/neighborhood", async (original) => ({
   ...await original<typeof import("@/services/neighborhood")>(),
-  fetchNeighborhoodResidents: async () => [{
+  fetchNeighborhoodResidents: vi.fn(async () => [{
     id: 2, name: "다른 기록자", nickname: "다른 기록자", role: "USER",
     postCount: 1, level: 0, activity: 1, activityPoints: null,
-  }],
+  }]),
 }));
 vi.mock("@/utils/city/world", () => ({
   createCity: (...args: unknown[]) => {
@@ -77,7 +82,7 @@ vi.mock("@/utils/city/world", () => ({
 
 const user = auth.user as { value: UserProfile | null };
 const wrappers: VueWrapper[] = [];
-async function render() {
+async function render(writer = false) {
   window.history.replaceState({}, "", "/");
   const router = createRouter({
     history: createWebHistory(),
@@ -86,14 +91,14 @@ async function render() {
       {
         path: "/write/:draftId?",
         name: "blog-write",
-        component: { template: "<div />" },
+        component: writer ? () => import("@/views/WriteView.vue") : { template: "<div />" },
       },
     ],
   });
   await router.push("/blog");
   const wrapper = mount(RouterView, {
     attachTo: document.body,
-    global: { plugins: [router], stubs: { AccountActions: true, PostComments: true, PostLikeButton: true } },
+    global: { plugins: [router], stubs: { AccountActions: true, PostComments: true, PostLikeButton: true, MarkdownEditor: true } },
   });
   wrappers.push(wrapper);
   await flushPromises();
@@ -113,6 +118,8 @@ async function searchFor(wrapper: VueWrapper, value: string) {
 describe("블로그 글 목록", () => {
   beforeEach(() => {
     user.value = null;
+    vi.clearAllMocks();
+    takeSavedPost(undefined, undefined);
     setHome.mockClear();
     clearCityState();
     for (const mock of Object.values(cityLifecycle)) mock.mockReset();
@@ -125,6 +132,78 @@ describe("블로그 글 목록", () => {
       wrapper.vm.$router.options.history.destroy();
       wrapper.unmount();
     });
+  });
+
+  it("수정 응답으로 새 제목과 본문을 재조회 없이 바로 표시할 수 있다.", async () => {
+    user.value = userFixture("USER");
+    blogApiMock.posts = [postFixture({ content: "수정 전 본문", likedByMe: true })];
+    const wrapper = await render(true);
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
+    await wrapper.get('[aria-label="게시글 수정"]').trigger("click");
+    await flushPromises();
+    await vi.waitFor(() => expect(wrapper.find(".writer-publish").exists()).toBe(true));
+    await wrapper.get('[aria-label="게시글 제목"]').setValue("바뀐 제목");
+    vi.mocked(updatePost).mockResolvedValue(postFixture({
+      title: "바뀐 제목", content: "서버에서 저장한 본문", likeCount: 0, likedByMe: false,
+    }));
+    vi.clearAllMocks();
+
+    await wrapper.get(".writer-publish").trigger("click");
+    await vi.waitFor(() => expect(wrapper.find(".article-body").exists()).toBe(true));
+
+    expect(wrapper.get(".article-body h2").text()).toBe("바뀐 제목");
+    expect(wrapper.get(".article-body").text()).toContain("서버에서 저장한 본문");
+    expect(wrapper.vm.$router.currentRoute.value.params.postSlug).toBe("바뀐-제목");
+    expect(updatePost).toHaveBeenCalledOnce();
+    expect(fetchPost).not.toHaveBeenCalled();
+    expect(fetchPosts).not.toHaveBeenCalled();
+    expect(fetchNeighborhoodResidents).not.toHaveBeenCalled();
+    expect(fetchMyPostCount).not.toHaveBeenCalled();
+    expect(wrapper.get("post-like-button-stub").attributes("likecount")).toBe("10");
+    expect(wrapper.get("post-like-button-stub").attributes("likedbyme")).toBe("true");
+  });
+
+  it("새 글 저장 응답을 표시하고 다시 방문할 때는 본문만 조회할 수 있다.", async () => {
+    user.value = userFixture("USER");
+    const wrapper = await render();
+    const post = postFixture({ id: 99, title: "새 글", content: "새 본문" });
+    await wrapper.vm.$router.push("/write");
+    rememberSavedPost(post);
+    const target = { name: "blog-post", params: { authorSlug: "기록자", postSlug: "새-글" }, state: { postId: 99 } };
+    vi.clearAllMocks();
+    await wrapper.vm.$router.replace(target);
+    await flushPromises();
+    expect(wrapper.get(".article-body").text()).toContain("새 본문");
+    expect(fetchPosts).not.toHaveBeenCalled();
+    expect(fetchPost).not.toHaveBeenCalled();
+    await wrapper.vm.$router.push("/write");
+    vi.mocked(fetchPost).mockResolvedValueOnce({ ...post, content: "최신 본문" });
+    await wrapper.vm.$router.push(target);
+    await flushPromises();
+    expect(fetchPost).toHaveBeenCalledExactlyOnceWith(99);
+    expect(fetchPosts).not.toHaveBeenCalled();
+    expect(wrapper.get(".article-body").text()).toContain("최신 본문");
+  });
+
+  it("본문을 조회하는 동안 오류를 표시하지 않고 삭제된 글을 다시 보여주지 않을 수 있다.", async () => {
+    const wrapper = await render();
+    let reject!: (reason: unknown) => void;
+    vi.mocked(fetchPost).mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".blog-empty-state, .blog-storage-error, .article-body").exists()).toBe(false);
+    reject(new AuthError(404, "POST_NOT_FOUND", "not found"));
+    await flushPromises();
+    expect(wrapper.find(".article-body").exists()).toBe(false);
+    expect(wrapper.get(".blog-empty-state").text()).toContain("글을 찾을 수 없어요");
+  });
+
+  it("계정이 달라지면 저장 응답의 비공개 본문을 재사용하지 않을 수 있다.", async () => {
+    const post = postFixture({ content: "비공개 본문", visibility: "PRIVATE" });
+    rememberSavedPost(post);
+    expect(takeSavedPost(post.id, 2)).toBeUndefined();
+    expect(takeSavedPost(post.id, 1)).toBeUndefined();
   });
 
   it("콘텐츠 페이지에는 모달과 3D 화면 없이 헤더 하나만 표시할 수 있다.", async () => {

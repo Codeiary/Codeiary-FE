@@ -29,6 +29,7 @@ import {
   type BlogDraft,
 } from "@/services/blog-storage";
 import { createPost, updatePost } from "@/services/blog-api";
+import { rememberSavedPost } from "@/store/saved-post";
 import type { EditorAction } from "@/utils/blog/editor-commands";
 import {
   normalizeImageLayout,
@@ -486,13 +487,20 @@ async function publish() {
       });
     await deleteDraft(draft.id, draft.authorId);
     complete = true;
+    // The update API currently returns zeroed like fields. Keep the state seen
+    // when editing until the next article visit, without fetching the body again.
+    if (data.postId) {
+      post.likeCount = data.likeCount ?? post.likeCount;
+      post.likedByMe = data.likedByMe ?? post.likedByMe;
+    }
+    rememberSavedPost(post);
     await router.replace({
       name: "blog-post",
       params: {
         authorSlug: authorSlug(post.author?.name || draft.author.name),
         postSlug: post.slug || postSlug(post.title),
       },
-      state: { blogPrevious: null },
+      state: { blogPrevious: null, postId: post.id },
     });
   } catch (reason) {
     error.value =

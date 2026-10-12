@@ -15,7 +15,7 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 const { user } = auth;
-const emit = defineEmits<{ updated: [] }>();
+const emit = defineEmits<{ updated: [state: PostLikeState] }>();
 const count = ref(props.likeCount);
 const liked = ref(props.likedByMe);
 const busy = ref(false);
@@ -38,7 +38,7 @@ async function toggle() {
     const result = await updatePostLike(props.postId, !liked.value);
     count.value = result.likeCount;
     liked.value = result.likedByMe;
-    emit("updated");
+    emit("updated", result);
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "좋아요를 반영하지 못했어요.";
   } finally {
