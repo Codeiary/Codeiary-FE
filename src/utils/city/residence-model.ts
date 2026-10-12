@@ -347,5 +347,16 @@ export function createResidenceModels({ box, cylinder, sphere }: Shapes) {
     instanceStaticMeshes(house);
     return { house, tier, labelHeight: height + tier.roofHeight };
   }
-  return { build };
+  const models = new Map<string, ReturnType<typeof build>>();
+  return {
+    build(level: HouseLevel, facade: string) {
+      const key = `${level}:${facade}`;
+      let model = models.get(key);
+      if (!model) {
+        model = build(level, facade);
+        models.set(key, model);
+      }
+      return { ...model, house: model.house.clone(true) };
+    },
+  };
 }
