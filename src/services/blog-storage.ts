@@ -17,6 +17,8 @@ export interface BlogDraft {
   createdAt: string;
   updatedAt: string;
   postId?: number;
+  likeCount?: number;
+  likedByMe?: boolean;
   imageLayouts?: ImageLayouts;
   coverImage?: string;
   visibility?: PostVisibility;
@@ -118,10 +120,17 @@ export async function editPost(post: BlogPost, authorId: number) {
   const existing = (await listDrafts(authorId)).find(
     (draft) => draft.postId === post.id,
   );
-  if (existing) return existing;
+  if (existing) {
+    existing.likeCount = post.likeCount;
+    existing.likedByMe = post.likedByMe;
+    await saveDraft(existing);
+    return existing;
+  }
   const draft = {
     ...createDraft({ ...post.author, id: authorId }),
     postId: post.id,
+    likeCount: post.likeCount,
+    likedByMe: post.likedByMe,
     title: post.title,
     category: post.category,
     content: post.content,
