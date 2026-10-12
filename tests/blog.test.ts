@@ -227,7 +227,7 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     await wrapper.get('[aria-label="게시글 수정"]').trigger("click");
     await flushPromises();
-    await vi.waitFor(() => expect(wrapper.find(".writer-publish").exists()).toBe(true));
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="게시글 제목"]').exists()).toBe(true));
     await wrapper.get('[aria-label="게시글 제목"]').setValue("바뀐 제목");
     vi.mocked(updatePost).mockResolvedValue(postFixture({
       title: "바뀐 제목", content: "서버에서 저장한 본문", likeCount: 0, likedByMe: false,
