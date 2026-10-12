@@ -1,9 +1,9 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type Ref } from "vue";
 import { auth } from "@/store/auth";
 import { fetchMyPostCount } from "@/services/blog-api";
-import { fetchNeighborhoodResidents, residenceDirectory } from "@/services/neighborhood";
+import { residenceDirectory } from "@/services/neighborhood";
+import { neighborhoodResidents, loadNeighborhoodResidents } from "@/store/neighborhood";
 import type { BlogPost } from "@/utils/blog/posts";
-import type { Residence } from "@/utils/city/residences";
 
 export function useResidenceDirectory(
   posts: Ref<BlogPost[]> = shallowRef([]),
@@ -11,19 +11,22 @@ export function useResidenceDirectory(
 ) {
   const { user } = auth;
   const ownPostCount = ref<number>();
-  const apiResidents = shallowRef<Residence[]>([]);
   const loaded = ref(false);
   let disposed = false;
   let countRequest = 0;
-  let residentsRequest: Promise<void> | undefined;
 
   const directory = computed(() => {
     const residents = new Map(residenceDirectory(user.value, posts.value, ownPostCount.value)
       .map((resident) => [resident.id, resident]));
-    for (const resident of apiResidents.value) {
+    for (const resident of neighborhoodResidents.value) {
       const current = residents.get(resident.id);
-      residents.set(resident.id, current && resident.id === user.value?.id
-        ? current : { ...current, ...resident });
+      if (current && resident.id === user.value?.id) {
+        // Keep the public level while the owner's complete post count is loading.
+        if (ownPostCount.value === undefined && resident.postCount > current.postCount)
+          Object.assign(current, {
+            postCount: resident.postCount, level: resident.level, activity: resident.activity,
+          });
+      } else residents.set(resident.id, { ...current, ...resident });
     }
     return [...residents.values()];
   });
@@ -31,10 +34,10 @@ export function useResidenceDirectory(
   const ownHouseLevel = computed(() => ownResidence.value?.level ?? 0);
 
   function loadResidents() {
-    return residentsRequest ??= fetchNeighborhoodResidents()
-      .then((residents) => { if (!disposed) apiResidents.value = residents; })
-      .catch(() => { /* Available authors remain visible when the directory is unavailable. */ })
-      .finally(() => { if (!disposed) loaded.value = true; });
+    return loadNeighborhoodResidents()
+      .finally(() => {
+        if (!disposed) loaded.value = true;
+      });
   }
   watch([() => user.value?.id, enabled], async ([id, active]) => {
     const request = ++countRequest;
