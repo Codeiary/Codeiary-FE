@@ -20,7 +20,7 @@ const props = withDefaults(
   }>(),
   { own: true, level: 0, activityPoints: null },
 );
-defineEmits<{ blog: []; post: [post: BlogPost] }>();
+defineEmits<{ blog: []; post: [post: BlogPost]; prefetch: [id: number] }>();
 type Section = "blog" | "portfolio" | "issues";
 const section = ref<Section>("blog");
 const selected = ref<HomeEntry>();
@@ -204,6 +204,7 @@ watch(editableUser, (user) => { if (!user) closeEditor(); });
                 :post="post"
                 compact
                 @open="$emit('post', post)"
+                @prefetch="$emit('prefetch', $event)"
               />
             </div>
             <div v-else class="home-empty">
