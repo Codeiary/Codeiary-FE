@@ -33,6 +33,7 @@ describe("인증 라우트", () => {
       history: createMemoryHistory(),
       routes: [
         { path: "/", name: "city", component },
+        { path: "/home", name: "user-home", component },
         { path: "/login", name: "login", component },
         {
           path: "/onboarding",
@@ -73,6 +74,17 @@ describe("인증 라우트", () => {
     await router.push("/admin");
     expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/admin");
     expect(auth.verifyAdmin).not.toHaveBeenCalled();
+  });
+  it("이웃집은 공개하고 내 집은 로그인한 사용자만 방문할 수 있다.", async () => {
+    const router = routerFixture();
+    await router.push("/home?resident=2");
+    expect(router.currentRoute.value.name).toBe("user-home");
+    await router.push("/home");
+    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/home");
+    user.value = userFixture("USER");
+    await router.push("/home");
+    expect(router.currentRoute.value.name).toBe("user-home");
+    expect(loginDestination("/home")).toBe("/home");
   });
   it("글쓰기 진입 시 로그인 후 편집 화면으로 돌아올 수 있다.", async () => {
     const router = routerFixture();

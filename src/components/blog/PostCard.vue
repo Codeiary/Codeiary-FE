@@ -56,7 +56,7 @@ function openPost(event: MouseEvent, id: number) {
         </div>
       </div>
     </a>
-    <div v-if="compact" class="post-compact-actions">
+    <div v-if="compact && post.visibility !== 'PRIVATE'" class="post-compact-actions">
       <PostLikeButton :post-id="post.id" :like-count="post.likeCount" :liked-by-me="post.likedByMe" compact @updated="emit('like')" />
     </div>
     <div v-if="!compact" class="post-card-details">
@@ -77,7 +77,7 @@ function openPost(event: MouseEvent, id: number) {
       <div class="post-footer">
         <span>{{ post.date }}</span
         ><span class="post-footer-actions">
-          <PostLikeButton :post-id="post.id" :like-count="post.likeCount" :liked-by-me="post.likedByMe" @updated="emit('like')" />
+          <PostLikeButton v-if="post.visibility !== 'PRIVATE'" :post-id="post.id" :like-count="post.likeCount" :liked-by-me="post.likedByMe" @updated="emit('like')" />
           <Icon name="arrow" :size="15" />
         </span>
       </div>
