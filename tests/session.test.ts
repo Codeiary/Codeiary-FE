@@ -40,7 +40,7 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
   }
 
   function requestsTo(path: string) {
-    return fetchMock.mock.calls.filter(([url]) => url === `/api${path}`);
+    return fetchMock.mock.calls.filter(([url]) => url === `${path}`);
   }
 
   function expectCookieRequests() {
@@ -57,7 +57,7 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     await login();
 
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/users/me");
+    expect(fetchMock.mock.calls[0]![0]).toBe("/users/me");
     expect(fetchMock.mock.calls[0]![1]?.body).toBeUndefined();
     expect(session.user.value).toEqual(userFixture());
     expect(storage.getItem("codeiary.session")).toBeNull();
@@ -75,7 +75,7 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
 
     expect(await Promise.all([first, second])).toEqual([true, true]);
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/users/me");
+    expect(fetchMock.mock.calls[0]![0]).toBe("/users/me");
     expect(session.user.value).toEqual(userFixture());
     expectCookieRequests();
   });
@@ -99,7 +99,7 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
 
     expect(await session.restore()).toBe(true);
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/users/me", "/api/auth/reissue", "/api/users/me",
+      "/users/me", "/auth/reissue", "/users/me",
     ]);
     const reissue = requestsTo("/auth/reissue")[0]![1];
     expect(reissue?.method).toBe("POST");
@@ -232,7 +232,7 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     await Promise.all([refresh, logout]);
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/users/me", "/api/users/me", "/api/auth/reissue", "/api/auth/logout",
+      "/users/me", "/users/me", "/auth/reissue", "/auth/logout",
     ]);
     expect(session.user.value).toBeNull();
   });
@@ -359,7 +359,7 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
 
     const upload = session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" }));
     const rejected = expect(upload).rejects.toMatchObject({ code: "SESSION_CHANGED" });
-    const requestUrl = stage === "주소 발급" ? "/api/images/presigned-url" : result.uploadUrl;
+    const requestUrl = stage === "주소 발급" ? "/images/presigned-url" : result.uploadUrl;
     await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === requestUrl)).toBe(true));
     await session.logout();
     pending.resolve(stage === "주소 발급" ? jsonResponse(result) : new Response(null));
@@ -434,12 +434,12 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     let expired = true;
     let adminRequests = 0;
     fetchMock.mockImplementation(async (url) => {
-      if (url === "/api/auth/reissue") {
+      if (url === "/auth/reissue") {
         const response = await rotation.promise;
         expired = false;
         return response;
       }
-      if (url === "/api/admin/me") {
+      if (url === "/admin/me") {
         adminRequests++;
         return adminRequests <= 2 ? unauthorized() : jsonResponse(userFixture());
       }

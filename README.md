@@ -50,7 +50,7 @@ API·OAuth를 프록시하지 않습니다. 개발 서버에서만 `server/index
 로컬 프로덕션 빌드와 CI는 `.env.production`의 기본 주소를 사용합니다.
 
 ```dotenv
-VITE_API_BASE_URL=https://api.codeiary.com/api
+VITE_API_BASE_URL=https://api.codeiary.com
 VITE_GOOGLE_AUTH_URL=https://api.codeiary.com/oauth2/authorization/google
 ```
 
@@ -61,7 +61,7 @@ VITE_GOOGLE_AUTH_URL=https://api.codeiary.com/oauth2/authorization/google
 ## Google 로그인 / 온보딩
 
 - `/login`: Google 로그인만 표시하며 기존 이메일·비밀번호 로그인은 제거했습니다.
-- `/auth/callback`: 백엔드가 로그인 쿠키를 설정한 뒤 복귀하는 화면입니다. `GET /api/users/me`로 현재 사용자를 확인하고 온보딩 또는 원래 화면으로 이동합니다.
+- `/auth/callback`: 백엔드가 로그인 쿠키를 설정한 뒤 복귀하는 화면입니다. `GET /users/me`로 현재 사용자를 확인하고 온보딩 또는 원래 화면으로 이동합니다.
 - `/onboarding`: 필수 닉네임만 설정합니다. 닉네임은 한글·영문·숫자·밑줄 2~20자이며, 입력 중 중복 확인과 저장 시 중복 거절을 처리합니다. 신규 사용자는 `PENDING`이고 저장 후 `USER`로 전환됩니다.
 - 내 집의 프로필 수정에서 닉네임·선택 프로필 사진·GitHub 주소·공개 연락 이메일을 설정합니다. 닉네임 입력 중 중복 여부를 표시하며, 중복 또는 확인 실패 상태에서는 저장할 수 없습니다. 본인의 집에서만 편집할 수 있으며, 로그인 이메일은 공개 연락처에 자동으로 넣지 않습니다. 사진 선택 후 미리보기·변경·삭제가 가능하며, 저장을 누르면 사진 업로드 후 프로필을 갱신합니다.
 - 인증 요청은 `credentials: "include"`로 쿠키를 전송합니다. 프론트는 JWT를 읽거나 저장하지 않으며 Authorization 헤더를 만들지 않습니다. 로그인 시작 시 `sessionStorage`에는 안전한 복귀 주소와 시작 시각만 저장합니다. 실제 로그인은 저장소가 차단되어도 진행하고, 복귀 정보가 없으면 홈으로 이동합니다.
@@ -88,24 +88,24 @@ OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은
 
 | 요청 | API 경로 | 계약 |
 | --- | --- | --- |
-| GET | `/api/users/me` | 인증 쿠키로 현재 사용자 프로필 조회 |
-| POST | `/api/auth/reissue` | 본문 없이 Refresh Token 쿠키 전송, 204 및 새 인증 쿠키 |
-| POST | `/api/auth/logout` | 본문 없이 인증 쿠키 전송, 204 및 쿠키 삭제 |
-| GET | `/api/admin/me` | ADMIN 권한 확인 및 사용자 프로필 조회 |
+| GET | `/users/me` | 인증 쿠키로 현재 사용자 프로필 조회 |
+| POST | `/auth/reissue` | 본문 없이 Refresh Token 쿠키 전송, 204 및 새 인증 쿠키 |
+| POST | `/auth/logout` | 본문 없이 인증 쿠키 전송, 204 및 쿠키 삭제 |
+| GET | `/admin/me` | ADMIN 권한 확인 및 사용자 프로필 조회 |
 
 프론트는 401 응답을 받으면 재발급 요청을 한 번 공유하여 처리하고 원래 요청을 재시도합니다.
 로그아웃은 서버의 쿠키 삭제·토큰 폐기를 확인한 뒤 사용자 상태를 비웁니다.
 
 온보딩과 내 집 프로필 설정은 다음 API를 사용합니다. 백엔드 [사용자 온보딩 이슈 #17](https://github.com/Codeiary/Codeiary-BE/issues/17) 구현을 함께 적용해야 합니다.
 
-- `GET /api/users/nickname-availability?nickname=...` → `{ available: boolean }`.
-- `POST /api/users/me/onboarding` → `multipart/form-data`의 `nickname`만 받고 온보딩이 완료된 사용자 프로필을 반환합니다. 중복은 `409 / NICKNAME_TAKEN`으로 응답합니다.
+- `GET /users/nickname-availability?nickname=...` → `{ available: boolean }`.
+- `POST /users/me/onboarding` → `multipart/form-data`의 `nickname`만 받고 온보딩이 완료된 사용자 프로필을 반환합니다. 중복은 `409 / NICKNAME_TAKEN`으로 응답합니다.
 - 선택한 원본은 브라우저에서 256×256 JPEG로 변환하며, 프로필 업로드는 1MiB 이하로 제한합니다.
-- `POST /api/images/presigned-url`에 `{ contentType, contentLength }`를 인증 쿠키와 함께 보내고 `{ uploadUrl, imageUrl, headers, expiresAt }`를 받습니다. 서버의 공통 이미지 계약은 JPG·PNG 10MiB 이하입니다.
+- `POST /images/presigned-url`에 `{ contentType, contentLength }`를 인증 쿠키와 함께 보내고 `{ uploadUrl, imageUrl, headers, expiresAt }`를 받습니다. 서버의 공통 이미지 계약은 JPG·PNG 10MiB 이하입니다.
 - 로컬 업로드는 백엔드 폴더에서 `docker compose -f compose.local.yaml up -d`로 S3Mock을 실행합니다. 개발 서버에서만 `http://localhost:9090/codeiary-local/` 이미지 주소를 허용하며, 운영 빌드는 HTTPS만 허용합니다.
 - 파일은 발급받은 HTTPS `uploadUrl`에 `PUT`으로 직접 전송합니다. 서버가 지정한 `Content-Type` 등 업로드 헤더만 사용하고 쿠키·Authorization 헤더를 보내지 않습니다. 파일 전송 제한 시간은 60초이며, 실패해도 토큰 재발급이나 자동 재전송을 하지 않습니다.
 - S3 전송 성공 후 CloudFront `imageUrl`을 기존 프로필 수정 요청에 포함합니다. 주소 발급이나 파일 전송만으로 사용자 프로필을 바꾸지 않습니다. S3 CORS에는 프론트 오리진의 `PUT`과 업로드 헤더가 허용되어야 합니다.
-- `PUT /api/users/me/profile` → JSON의 `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`을 저장하고 갱신된 본인 프로필을 반환합니다. 비워 둔 선택 항목은 `null`로 보내 삭제합니다. `PENDING` 계정은 사용할 수 없습니다.
+- `PUT /users/me/profile` → JSON의 `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`을 저장하고 갱신된 본인 프로필을 반환합니다. 비워 둔 선택 항목은 `null`로 보내 삭제합니다. `PENDING` 계정은 사용할 수 없습니다.
 
 프로필은 `id`, `email`, `name`, `nickname`, `profileImageUrl`, `githubUrl`, `contactEmail`, `onboardingCompleted`, `role`을 포함합니다.
 온보딩을 완료하지 않고 나가도 다시 로그인하면 `onboardingCompleted: false`를 확인해 온보딩 화면으로 이동합니다.
