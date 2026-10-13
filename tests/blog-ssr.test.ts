@@ -16,7 +16,7 @@ function pageResponse(title = "서버에서 받은 공개 글") {
 describe("블로그 첫 페이지 SSR", { timeout: 15_000 }, () => {
   it("브라우저 없이 공개 글과 링크를 HTML로 렌더링할 수 있다.", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(pageResponse());
-    const page = await render("/blog", "http://localhost:8080/api", request);
+    const page = await render("/blog", "https://api.codeiary.com/api", request);
     expect(page.html).toContain("서버에서 받은 공개 글");
     expect(page.html).toContain('href="/blog?page=2"');
     expect(page.html).toContain('class="post-open" href="/blog/');
@@ -24,6 +24,8 @@ describe("블로그 첫 페이지 SSR", { timeout: 15_000 }, () => {
     expect(page.robots).toBe("index, follow");
     expect(page.head).toContain('href="https://codeiary.com/blog"');
     const [url, init] = request.mock.calls[0]!;
+    expect(new URL(String(url)).origin).toBe("https://api.codeiary.com");
+    expect(new URL(String(url)).pathname).toBe("/api/posts");
     expect(String(url)).toContain("page=0&size=12&sort=LATEST");
     expect(init?.headers).toEqual({ Accept: "application/json" });
   });

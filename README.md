@@ -39,9 +39,24 @@ Vue 3와 Three.js로 구현한 도시형 개인 블로그입니다. 화면 전�
 
 WebGL을 사용할 수 없는 환경에서는 상단 메뉴로 콘텐츠를 볼 수 있습니다.
 
-API 요청은 운영 환경에서 같은 오리진의 `/api`를 사용합니다. 개발 서버에서는
-`server/index.mjs`가 `/api`, `/oauth2`, `/login/oauth2` 요청을 `http://localhost:8080`으로 프록시합니다.
-운영 Nginx도 같은 OAuth 시작·콜백 경로를 백엔드에 전달합니다.
+운영 프론트는 AWS A 계정의 Lightsail에서 `https://codeiary.com`으로 서비스하고,
+백엔드는 AWS B 계정의 EC2에서 `https://api.codeiary.com`으로 서비스합니다.
+브라우저는 API와 OAuth를 백엔드 도메인으로 직접 요청합니다. 프론트 Nginx와 운영 Node 서버는
+API·OAuth를 프록시하지 않습니다. 개발 서버에서만 `server/index.mjs`가 `/api`, `/oauth2`,
+`/login/oauth2` 요청을 로컬 백엔드 `http://localhost:8080`으로 프록시합니다.
+
+배포는 서울 리전 Parameter Store의 `/codeiary/prod/frontend/api-base-url`,
+`google-auth-url`, `api-origin`을 읽어 빌드 및 SSR 컨테이너 실행에 사용합니다.
+로컬 프로덕션 빌드와 CI는 `.env.production`의 기본 주소를 사용합니다.
+
+```dotenv
+VITE_API_BASE_URL=https://api.codeiary.com/api
+VITE_GOOGLE_AUTH_URL=https://api.codeiary.com/oauth2/authorization/google
+```
+
+`VITE_*` 변수는 빌드 시 반영되므로 변경 후 다시 빌드해야 합니다.
+로컬 개발 설정은 `.env.example`을 참고하고, 운영 API를 localhost에서 직접 호출해 인증을
+테스트하지 않습니다. localhost와 운영 API는 서로 다른 사이트이므로 Strict 쿠키를 공유하지 않습니다.
 
 ## Google 로그인 / 온보딩
 
@@ -53,8 +68,8 @@ API 요청은 운영 환경에서 같은 오리진의 `/api`를 사용합니다.
 
 ### 백엔드 연결
 
-Google 로그인 시작 주소는 기본적으로 `/oauth2/authorization/google`이며 필요하면
-`VITE_GOOGLE_AUTH_URL`로 지정합니다.
+Google 로그인 시작 주소는 운영에서 `https://api.codeiary.com/oauth2/authorization/google`,
+개발에서 `/oauth2/authorization/google`이며 `VITE_GOOGLE_AUTH_URL`로 지정합니다.
 OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은 모두 백엔드가 담당합니다.
 프론트에는 Google 비밀 키나 앱 교환 코드가 필요하지 않습니다.
 
@@ -63,8 +78,13 @@ OAuth state·Google 인증 코드 교환·ID 토큰 검증·JWT 쿠키 설정은
 `https://codeiary.com/auth/callback`입니다. Google에 등록할 승인된 리디렉션 URI는
 서버 콜백인 `/login/oauth2/code/google` 경로이며, 로컬 프록시를 사용하면
 `http://localhost:5173/login/oauth2/code/google`로 설정합니다.
-운영은 `https://codeiary.com/login/oauth2/code/google`입니다.
-인증 쿠키의 SameSite=Strict 설정에 맞게 프론트와 API는 같은 사이트에서 서비스합니다.
+운영은 `https://api.codeiary.com/login/oauth2/code/google`입니다.
+프론트와 API는 HTTPS의 같은 사이트이지만 서로 다른 오리진입니다. 백엔드는
+`https://codeiary.com`에 대한 CORS와 credentials를 허용하고, OPTIONS 사전 요청 및
+401·403 오류 응답에도 CORS 정책을 적용해야 합니다. credentials 사용 시 Origin에 `*`를 쓰지 않습니다.
+인증 쿠키는 API 호스트에서 발급하며 Secure·HttpOnly를 유지합니다. 프론트에서 쿠키를 읽지
+않으므로 Domain을 부모 도메인으로 넓힐 필요는 없습니다. 이전 프론트 도메인의 인증 쿠키는
+백엔드 이전 시 삭제하며, 새 쿠키의 발급과 로그아웃 삭제 Domain·Path를 일치시켜야 합니다.
 
 | 요청 | API 경로 | 계약 |
 | --- | --- | --- |
@@ -105,7 +125,8 @@ CI에서도 테스트 통과 후 타입 검사와 프로덕션 빌드를 실행�
 `main` 브랜치에 push하면 GitHub Actions가 클라이언트·SSR 번들을 Docker 이미지로 패키징해
 Amazon ECR Public에 게시합니다. SSM Run Command로 정적 파일은 `/var/www/codeiary`에 복사하고,
 Node 서버는 `codeiary-fe` 컨테이너로 실행합니다. Nginx는 `/blog` 요청만 내부 `127.0.0.1:3000`으로 전달합니다.
-API·OAuth는 기존 백엔드로, 나머지 화면과 정적 자산은 기존 Nginx 경로로 제공합니다.
+나머지 화면과 정적 자산은 프론트 Nginx가 제공합니다. 브라우저 API·OAuth 요청은
+EC2의 `api.codeiary.com`으로 직접 전송하고, SSR 컨테이너도 해당 백엔드의 공개 API를 조회합니다.
 정적 파일만 교체하면 SSR은 동작하지 않으므로 Docker·Nginx 설정도 함께 배포해야 합니다.
 
 ### 블로그 SSR
@@ -120,12 +141,17 @@ API·OAuth는 기존 백엔드로, 나머지 화면과 정적 자산은 기존 N
 - 현재 sitemap.xml은 홈과 블로그 목록만 포함합니다. 후속 페이지의 `nofollow`로 제한되는 글 탐색은 공개 게시글 사이트맵을 추가해 보완할 수 있습니다.
 
 로컬 개발은 `npm run dev`(5173), 빌드 결과 확인은 `npm run build && npm run preview`(3000)를 사용합니다.
-`API_ORIGIN`은 백엔드 주소(기본 `http://localhost:8080`), `PORT`와 `HOST`는 프론트 서버 바인딩 설정입니다.
+`API_ORIGIN`은 Node 서버 실행 환경변수이며 개발 기본값은 `http://localhost:8080`,
+운영 기본값은 `https://api.codeiary.com`입니다. `/api` 경로를 붙이지 않으며 운영은 HTTPS만 허용합니다.
+배포 워크플로는 Parameter Store의 `api-origin` 값을 컨테이너에 전달합니다.
+Node 서버는 `.env` 파일을 자동 로드하지 않으므로 변경하려면 셸에서 export하거나 Docker에 전달합니다.
+`PORT`와 `HOST`는 프론트 서버 바인딩 설정입니다.
 Google OAuth 로컬 콜백은 5173에 등록되어 있으므로 인증을 확인할 때는 개발 서버를 사용합니다.
 
 GitHub Actions repository variables:
 
-- `AWS_ROLE_ARN`, `AWS_REGION`, `SSM_INSTANCE_ID`
+- `AWS_ROLE_ARN`, `AWS_REGION`, `SSM_INSTANCE_ID`: AWS A 계정의 프론트 Lightsail 배포용 값.
+  AWS B 계정 백엔드 자격 증명은 프론트 배포에 필요하지 않습니다.
 
 Access Key는 저장하지 않고 GitHub OIDC로 프론트 전용 IAM 역할을 사용합니다.
 Cloudflare의 루트 및 `www` 레코드는 Lightsail 고정 IP를 가리키고 프록시를 켭니다.

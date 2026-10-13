@@ -11,6 +11,15 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 describe("OAuth 인증과 온보딩", () => {
+  it("운영 API 도메인에서 Google 로그인을 시작하고 프론트 복귀 정보를 보존한다.", () => {
+    vi.stubEnv("VITE_GOOGLE_AUTH_URL", "https://api.codeiary.com/oauth2/authorization/google");
+    try {
+      expect(googleLoginUrl("/blog")).toBe("https://api.codeiary.com/oauth2/authorization/google");
+      expect(consumeOAuthAttempt()).toBe("/blog");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("로그인 복귀 주소만 저장하고 한 번 복원할 수 있다.", () => {
     const url = new URL(googleLoginUrl("/blog/writer/post"), location.origin);
     expect(url.pathname).toBe("/oauth2/authorization/google");
