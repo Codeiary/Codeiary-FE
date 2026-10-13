@@ -17,7 +17,7 @@ export function createAuthApi(
   const baseUrl = (
     options.baseUrl ??
     import.meta.env.VITE_API_BASE_URL ??
-    "/api"
+    ""
   ).replace(/\/$/, "");
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
