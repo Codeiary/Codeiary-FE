@@ -45,7 +45,9 @@ WebGL을 사용할 수 없는 환경에서는 상단 메뉴로 콘텐츠를 볼 
 API·OAuth를 프록시하지 않습니다. 개발 서버에서만 `server/index.mjs`가 `/api`, `/oauth2`,
 `/login/oauth2` 요청을 로컬 백엔드 `http://localhost:8080`으로 프록시합니다.
 
-운영 빌드 주소는 `.env.production`에서 설정합니다. CI와 배포는 이 파일을 함께 사용합니다.
+배포는 서울 리전 Parameter Store의 `/codeiary/prod/frontend/api-base-url`,
+`google-auth-url`, `api-origin`을 읽어 빌드 및 SSR 컨테이너 실행에 사용합니다.
+로컬 프로덕션 빌드와 CI는 `.env.production`의 기본 주소를 사용합니다.
 
 ```dotenv
 VITE_API_BASE_URL=https://api.codeiary.com/api
@@ -141,7 +143,7 @@ EC2의 `api.codeiary.com`으로 직접 전송하고, SSR 컨테이너도 해당 
 로컬 개발은 `npm run dev`(5173), 빌드 결과 확인은 `npm run build && npm run preview`(3000)를 사용합니다.
 `API_ORIGIN`은 Node 서버 실행 환경변수이며 개발 기본값은 `http://localhost:8080`,
 운영 기본값은 `https://api.codeiary.com`입니다. `/api` 경로를 붙이지 않으며 운영은 HTTPS만 허용합니다.
-배포 워크플로도 `API_ORIGIN=https://api.codeiary.com`을 컨테이너에 명시합니다.
+배포 워크플로는 Parameter Store의 `api-origin` 값을 컨테이너에 전달합니다.
 Node 서버는 `.env` 파일을 자동 로드하지 않으므로 변경하려면 셸에서 export하거나 Docker에 전달합니다.
 `PORT`와 `HOST`는 프론트 서버 바인딩 설정입니다.
 Google OAuth 로컬 콜백은 5173에 등록되어 있으므로 인증을 확인할 때는 개발 서버를 사용합니다.
