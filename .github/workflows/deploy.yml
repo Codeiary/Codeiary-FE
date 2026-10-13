@@ -11,6 +11,7 @@ on:
       - "vite.config.ts"
       - "tsconfig*.json"
       - "env.d.ts"
+      - ".env.production"
       - "index.html"
       - "deploy/**"
       - "server/**"
@@ -37,8 +38,6 @@ jobs:
           cache: npm
       - name: Build
         run: npm ci && npm run build
-        env:
-          VITE_API_BASE_URL: /api
       - name: Configure temporary AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -78,7 +77,7 @@ jobs:
               \"docker cp codeiary-fe-release:/etc/codeiary/codeiary.conf /etc/nginx/sites-available/codeiary\",
               \"docker rm codeiary-fe-release\",
               \"docker rm -f codeiary-fe >/dev/null 2>&1 || true\",
-              \"docker run -d --name codeiary-fe --restart unless-stopped --network host -e HOST=127.0.0.1 -e PORT=3000 -e API_ORIGIN=http://127.0.0.1:8080 ${IMAGE}\",
+              \"docker run -d --name codeiary-fe --restart unless-stopped --network host -e HOST=127.0.0.1 -e PORT=3000 -e API_ORIGIN=https://api.codeiary.com ${IMAGE}\",
               \"curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:3000/healthz\",
               \"ln -sfn /etc/nginx/sites-available/codeiary /etc/nginx/sites-enabled/codeiary\",
               \"rm -f /etc/nginx/sites-enabled/default\",

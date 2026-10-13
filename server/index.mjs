@@ -1,5 +1,4 @@
 import express from "express";
-import httpProxy from "http-proxy";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -7,8 +6,17 @@ import path from "node:path";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const production = process.argv.includes("--production");
 const port = Number(process.env.PORT || (production ? 3000 : 5173));
-const backend = process.env.API_ORIGIN || "http://localhost:8080";
-const apiBaseUrl = `${backend.replace(/\/$/, "")}/api`;
+const backendUrl = new URL(process.env.API_ORIGIN || (production
+  ? "https://api.codeiary.com"
+  : "http://localhost:8080"));
+if (backendUrl.username || backendUrl.password || backendUrl.pathname !== "/"
+    || backendUrl.search || backendUrl.hash
+    || !["http:", "https:"].includes(backendUrl.protocol)
+    || (production && backendUrl.protocol !== "https:")) {
+  throw new Error("API_ORIGIN must be an origin without credentials, path, query or fragment; production requires HTTPS.");
+}
+const backend = backendUrl.origin;
+const apiBaseUrl = `${backend}/api`;
 const app = express();
 app.disable("x-powered-by");
 const vite = production ? undefined : await (await import("vite")).createServer({
@@ -21,15 +29,20 @@ const manifest = production ? JSON.parse(await readFile(path.join(root, "dist/cl
 const renderer = production ? await import("../dist/server/entry-server.js") : undefined;
 
 app.get("/healthz", (_req, res) => res.type("text").send("ok"));
-const proxy = httpProxy.createProxyServer({ target: backend, xfwd: true, proxyTimeout: 60_000 });
-app.use((req, res, next) => {
-  if (!["/api/", "/oauth2/", "/login/oauth2/"].some((prefix) => req.path.startsWith(prefix))) return next();
-  proxy.web(req, res, (error) => {
-    console.error("Backend proxy failed:", error.message);
-    if (!res.headersSent) res.status(502).json({ code: "BACKEND_UNAVAILABLE" });
-    else res.end();
+// Only local development needs a same-origin proxy. Production browsers use
+// api.codeiary.com directly; this server contacts the API only for public SSR.
+if (!production) {
+  const { default: httpProxy } = await import("http-proxy");
+  const proxy = httpProxy.createProxyServer({ target: backend, xfwd: true, proxyTimeout: 60_000 });
+  app.use((req, res, next) => {
+    if (!["/api/", "/oauth2/", "/login/oauth2/"].some((prefix) => req.path.startsWith(prefix))) return next();
+    proxy.web(req, res, (error) => {
+      console.error("Backend proxy failed:", error.message);
+      if (!res.headersSent) res.status(502).json({ code: "BACKEND_UNAVAILABLE" });
+      else res.end();
+    });
   });
-});
+}
 if (vite) app.use(vite.middlewares);
 else app.use(express.static(path.join(root, "dist/client"), {
   index: false,
