@@ -16,7 +16,7 @@ if (backendUrl.username || backendUrl.password || backendUrl.pathname !== "/"
   throw new Error("API_ORIGIN must be an origin without credentials, path, query or fragment; production requires HTTPS.");
 }
 const backend = backendUrl.origin;
-const apiBaseUrl = `${backend}/api`;
+const apiBaseUrl = backend;
 const app = express();
 app.disable("x-powered-by");
 const vite = production ? undefined : await (await import("vite")).createServer({
@@ -35,7 +35,8 @@ if (!production) {
   const { default: httpProxy } = await import("http-proxy");
   const proxy = httpProxy.createProxyServer({ target: backend, xfwd: true, proxyTimeout: 60_000 });
   app.use((req, res, next) => {
-    if (!["/api/", "/oauth2/", "/login/oauth2/"].some((prefix) => req.path.startsWith(prefix))) return next();
+    if (!["/posts", "/auth/reissue", "/auth/logout"].includes(req.path)
+      && !["/posts/", "/users/", "/admin/", "/images/", "/oauth2/", "/login/oauth2/"].some((prefix) => req.path.startsWith(prefix))) return next();
     proxy.web(req, res, (error) => {
       console.error("Backend proxy failed:", error.message);
       if (!res.headersSent) res.status(502).json({ code: "BACKEND_UNAVAILABLE" });

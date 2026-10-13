@@ -20,11 +20,11 @@ describe("댓글 API", () => {
       status: 200,
       headers: { "Content-Type": "application/json" },
     }));
-    const api = createCommentApi({ fetch, baseUrl: "https://api.example.com/api" });
+    const api = createCommentApi({ fetch, baseUrl: "https://api.example.com" });
 
     await expect(api.readComments(25)).resolves.toEqual([comment]);
     expect(fetch).toHaveBeenCalledWith(
-      "https://api.example.com/api/posts/25/comments",
+      "https://api.example.com/posts/25/comments",
       expect.objectContaining({ credentials: "include", cache: "no-store" }),
     );
   });
