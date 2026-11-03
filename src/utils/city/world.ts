@@ -667,7 +667,6 @@ export function createCity(
     z: number,
     scale = 1,
     parent: THREE.Object3D = scene,
-    roofDetails = true,
   ) {
     const group = new THREE.Group();
     group.position.set(x, 0.3, z);
@@ -1635,7 +1634,6 @@ export function createCity(
     routeDestination: Destination | null = null,
     paused = false,
     suppressed: Destination | null = null,
-    night = false,
     disposed = false;
   let routeResidence: number | null = null;
   let suppressedResidence: number | null = null;
@@ -2174,7 +2172,6 @@ export function createCity(
       renderPaused();
     },
     setNight(value) {
-      night = value;
       landmarks.setNight(value);
       updateBillboard(value);
       hemi.intensity = value ? 1.3 : 2.5;

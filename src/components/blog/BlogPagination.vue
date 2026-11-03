@@ -3,7 +3,9 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import Icon from "@/components/Icon.vue";
 
-const props = defineProps<{ page: number; pageCount: number }>();
+const props = withDefaults(defineProps<{ page: number; pageCount: number; label?: string }>(), {
+  label: "게시글 페이지",
+});
 const emit = defineEmits<{ select: [page: number] }>();
 const route = useRoute();
 
@@ -36,7 +38,7 @@ const items = computed(() => {
 </script>
 
 <template>
-  <nav class="blog-pagination" aria-label="게시글 페이지">
+  <nav class="blog-pagination" :aria-label="label">
     <a
       class="pagination-direction pagination-previous"
       aria-label="이전 페이지"

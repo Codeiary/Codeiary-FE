@@ -1,23 +1,11 @@
 import type { UserProfile } from "@/store/auth";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 
-export interface HomeEntry {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  date: string;
-  tags: string[];
-  paragraphs: string[];
-}
-
 export interface HomeProfile {
   owner: BlogAuthor;
   email: string;
   github: string;
   profileImageUrl?: string | null;
-  projects: HomeEntry[];
-  issues: HomeEntry[];
 }
 
 export function createHomeProfile(user: UserProfile | null): HomeProfile {
@@ -33,8 +21,6 @@ export function createHomeProfile(user: UserProfile | null): HomeProfile {
     email: user?.contactEmail ?? "",
     github: user?.githubUrl ?? "",
     profileImageUrl: user?.profileImageUrl ?? null,
-    projects: [],
-    issues: [],
   };
 }
 
