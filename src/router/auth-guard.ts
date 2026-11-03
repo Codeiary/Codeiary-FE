@@ -33,7 +33,7 @@ export async function authGuard(to: RouteLocationNormalized) {
   if (to.name === "login" && auth.user.value && to.query.retry !== "1")
     return { path: loginDestination(to.query.redirect), replace: true };
   if (requiresAuth && !auth.user.value)
-    return { name: "login", query: { redirect: to.path }, replace: true };
+    return { name: "login", query: { redirect: to.name === "portfolio-write" ? to.fullPath : to.path }, replace: true };
   if (!to.meta.requiresAdmin) return;
   if (!auth.user.value)
     return { name: "login", query: { redirect: "/admin" }, replace: true };

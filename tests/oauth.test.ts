@@ -28,6 +28,13 @@ describe("OAuth 인증과 온보딩", () => {
     expect(consumeOAuthAttempt()).toBe("/");
     expect(safeAuthReturn("//example.com")).toBe("/");
   });
+  it("로그인 후 포트폴리오 수정 문서 ID를 유지하고 다른 복귀 주소는 차단한다", () => {
+    expect(safeAuthReturn("/portfolio/write?id=42")).toBe("/portfolio/write?id=42");
+    expect(safeAuthReturn("/portfolio/write")).toBe("/portfolio/write");
+    expect(safeAuthReturn("/portfolio/write?id=42&redirect=https://example.com")).toBe("/");
+    sessionStorage.setItem(OAUTH_ATTEMPT_KEY, JSON.stringify({ createdAt: Date.now(), redirect: "/portfolio/write?id=42" }));
+    expect(consumeOAuthAttempt()).toBe("/portfolio/write?id=42");
+  });
   it("큰 파일과 사진이 아닌 파일을 변환 전에 거절할 수 있다.", async () => {
     await expect(
       prepareAvatar(
