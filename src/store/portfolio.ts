@@ -6,6 +6,7 @@ export interface PortfolioItem {
   id: number;
   author: BlogAuthor;
   title: string;
+  defaultFont?: string;
   titleRuns?: PortfolioTextRun[];
   titleAlign?: "left" | "center" | "right";
   summary: string;

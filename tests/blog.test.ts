@@ -4,6 +4,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createWebHistory, createRouter } from "vue-router";
 import { RouterView } from "vue-router";
 import { fetchPost, fetchPosts, fetchMyPostCount, updatePost, removePost } from "@/services/blog-api";
+import { fetchPortfolio, removePortfolio } from "@/services/portfolio-api";
 import { fetchNeighborhoodResidents } from "@/services/neighborhood";
 import { rememberSavedPost, takeSavedPost } from "@/store/saved-post";
 import { AuthError } from "@/services/auth-api";
@@ -58,9 +59,22 @@ vi.mock("@/services/blog-api", () => ({
   updatePost: vi.fn(),
   removePost: vi.fn(),
 }));
+vi.mock("@/services/portfolio-api", () => ({
+  removePortfolio: vi.fn(async () => {}),
+  fetchPortfolio: vi.fn(async (id: number) => {
+    const item = portfolios.value.find((item) => item.id === id);
+    if (!item || item.visibility === "PRIVATE" && item.author.id !== auth.user.value?.id) throw new Error("포트폴리오를 찾을 수 없어요.");
+    return item;
+  }),
+  fetchPortfolioPage: vi.fn(async ({ mine, authorId, search, page = 0, size = 6 }: { mine?: boolean; authorId?: number; search?: string; page?: number; size?: number } = {}) => {
+    const items = [...portfolios.value].filter((item) => (mine ? item.author.id === auth.user.value?.id : item.visibility === "PUBLIC" && (!authorId || item.author.id === authorId))
+      && (!search || item.title.includes(search))).sort((a, b) => b.id - a.id);
+    return { content: items.slice(page * size, (page + 1) * size), totalElements: items.length, totalPages: Math.ceil(items.length / size), page };
+  }),
+}));
 vi.mock("@/store/auth", async () => {
   const { shallowRef } = await import("vue");
-  return { auth: { user: shallowRef(null) } };
+  return { auth: { user: shallowRef(null), restore: vi.fn(async () => true) } };
 });
 vi.mock("@/services/neighborhood", async (original) => ({
   ...await original<typeof import("@/services/neighborhood")>(),
@@ -314,9 +328,52 @@ describe("블로그 글 목록", () => {
     await wrapper.get("#post-delete-input").setValue("삭제");
     await wrapper.get(".post-delete-submit").trigger("click");
     await flushPromises();
+    expect(removePortfolio).toHaveBeenCalledExactlyOnceWith(1);
     expect(portfolios.value.some((item) => item.id === 1)).toBe(false);
     expect(wrapper.find("dialog").exists()).toBe(false);
     expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBeUndefined();
+  });
+
+  it("삭제 실패 시 확인창과 문서를 유지하고 서버 성공 후에만 목록으로 이동한다", async () => {
+    user.value = userFixture("USER");
+    portfolios.value = [portfolioFixture()];
+    const wrapper = await render();
+    await wrapper.vm.$router.push({ name: "portfolio", query: { portfolioId: "1" } });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="포트폴리오 삭제"]').exists()).toBe(true));
+    await wrapper.get('[aria-label="포트폴리오 삭제"]').trigger("click");
+    await flushPromises();
+    await wrapper.get("#post-delete-input").setValue("삭제");
+    vi.mocked(removePortfolio).mockRejectedValueOnce(new Error("삭제 실패"));
+    await wrapper.get(".post-delete-submit").trigger("click");
+    await flushPromises();
+    expect(wrapper.get("dialog").text()).toContain("삭제 실패");
+    expect(portfolios.value).toHaveLength(1);
+    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBe("1");
+    let finish!: () => void;
+    vi.mocked(removePortfolio).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await wrapper.get(".post-delete-submit").trigger("click");
+    expect(wrapper.get<HTMLButtonElement>(".post-delete-submit").element.disabled).toBe(true);
+    expect(portfolios.value).toHaveLength(1);
+    finish();
+    await flushPromises();
+    expect(portfolios.value).toHaveLength(0);
+    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBeUndefined();
+  });
+
+  it("캐시 없이 상세를 복원하고 늦게 도착한 이전 문서 응답을 무시한다.", async () => {
+    portfolios.value = [];
+    let finish!: (item: PortfolioItem) => void;
+    vi.mocked(fetchPortfolio).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const wrapper = await render();
+    await wrapper.vm.$router.push({ name: "portfolio", query: { portfolioId: "1" } });
+    await vi.waitFor(() => expect(fetchPortfolio).toHaveBeenCalledWith(1));
+    expect(wrapper.find(".content-empty, .portfolio-list-heading").exists()).toBe(false);
+    vi.mocked(fetchPortfolio).mockResolvedValueOnce({ ...portfolioFixture(), id: 2, title: "최신 문서" });
+    await wrapper.vm.$router.push({ query: { portfolioId: "2" } });
+    await vi.waitFor(() => expect(wrapper.find(".portfolio-document-title").text()).toBe("최신 문서"));
+    finish(portfolioFixture());
+    await flushPromises();
+    expect(wrapper.get(".portfolio-document-title").text()).toBe("최신 문서");
   });
 
   it("포트폴리오를 이미지와 홈 버튼 없이 최신순으로 페이지를 나누고 검색한다.", async () => {
@@ -331,11 +388,11 @@ describe("블로그 글 목록", () => {
     await wrapper.vm.$router.push({ name: "portfolio" });
     await flushPromises();
     const listed = () => wrapper.findAll(".portfolio-entry h3").map((item) => item.text());
-    expect(listed()).toEqual(["작업 13", "작업 12", "작업 11", "작업 10", "작업 9", "작업 8"]);
+    await vi.waitFor(() => expect(listed()).toEqual(["작업 13", "작업 12", "작업 11", "작업 10", "작업 9", "작업 8"]));
     expect(wrapper.find(".portfolio-feed img, .project-art").exists()).toBe(false);
     expect(wrapper.get("main").text()).not.toContain("최신순");
     await wrapper.get('[aria-label="포트폴리오 페이지"] [aria-label="2페이지"]').trigger("click");
-    expect(listed()).toEqual(["작업 7", "작업 6", "작업 5", "작업 4", "작업 3", "작업 2"]);
+    await vi.waitFor(() => expect(listed()).toEqual(["작업 7", "작업 6", "작업 5", "작업 4", "작업 3", "작업 2"]));
     await wrapper.get('[aria-label="포트폴리오 검색"]').setValue("작업 1");
     await vi.waitFor(() => expect(listed()).toEqual(["작업 13", "작업 12", "작업 11", "작업 10", "작업 1"]));
   });
@@ -635,13 +692,13 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     const listed = () => wrapper.findAll(".portfolio-entry h3").map((item) => item.text());
     expect(wrapper.get("#content-panel-title").text()).toBe("마이페이지");
-    expect(listed()).toEqual(["작업 12", "작업 11", "작업 10", "작업 9", "작업 8", "작업 7", "작업 6", "작업 5"]);
+    await vi.waitFor(() => expect(listed()).toEqual(["작업 12", "작업 11", "작업 10", "작업 9", "작업 8", "작업 7", "작업 6", "작업 5"]));
     expect(wrapper.get("#home-tab-portfolio").text()).toContain("12");
     expect(wrapper.find("#home-profile-editor").exists()).toBe(false);
     await wrapper.get('[aria-label="마이페이지 포트폴리오 페이지"] [aria-label="2페이지"]').trigger("click");
     await flushPromises();
     expect(wrapper.vm.$router.currentRoute.value.query).toEqual({ tab: "portfolio", page: "2" });
-    expect(listed()).toEqual(["작업 4", "작업 3", "작업 2", "작업 1"]);
+    await vi.waitFor(() => expect(listed()).toEqual(["작업 4", "작업 3", "작업 2", "작업 1"]));
     await wrapper.get(".portfolio-entry").trigger("click");
     await flushPromises();
     expect(wrapper.vm.$router.currentRoute.value.name).toBe("portfolio");
@@ -649,7 +706,7 @@ describe("블로그 글 목록", () => {
     wrapper.vm.$router.back();
     await flushPromises();
     expect(wrapper.get("#home-tab-portfolio").attributes("aria-selected")).toBe("true");
-    expect(listed()).toEqual(["작업 4", "작업 3", "작업 2", "작업 1"]);
+    await vi.waitFor(() => expect(listed()).toEqual(["작업 4", "작업 3", "작업 2", "작업 1"]));
     await wrapper.get('[aria-label="마이페이지 포트폴리오 검색"]').setValue("작업 1");
     await vi.waitFor(() => expect(listed()).toEqual(["작업 12", "작업 11", "작업 10", "작업 1"]));
     expect(wrapper.vm.$router.currentRoute.value.query.page).toBeUndefined();

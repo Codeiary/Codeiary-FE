@@ -19,6 +19,7 @@ const props = withDefaults(defineProps<{
   post: Pick<BlogPost, "title" | "category" | "tags" | "author" | "date" | "visibility" | "coverImage" | "content" | "imageLayouts">;
   blocks?: PortfolioBlock[];
   titleRuns?: PortfolioTextRun[];
+  defaultFont?: string;
   titleAlign?: "left" | "center" | "right";
   showHeader?: boolean;
   editable?: boolean;
@@ -89,7 +90,8 @@ function titleEnter() { stage.value?.querySelector<HTMLButtonElement>(".portfoli
 function updateContent(id: string, value: { content: string; document?: JSONContent }) {
   emit("updateBlock", id, { type: "markdown", content: value.content, document: value.document, runs: undefined });
 }
-watch(() => [props.titleRuns, props.blocks], () => {
+watch(() => [props.titleRuns, props.blocks, props.defaultFont], () => {
+  loadPortfolioFont(props.defaultFont);
   normalizeTextRuns(props.titleRuns, props.post.title).forEach((run) => loadPortfolioFont(run.font));
   function visit(node?: JSONContent, depth = 0) {
     if (!node || depth > 64) return;
@@ -201,7 +203,7 @@ watch(() => props.editable, (editable) => { if (!editable) finishDrag(); });
 </script>
 
 <template>
-  <article class="portfolio-document portfolio-article" :class="{ 'portfolio-document-editable': editable }" :style="{ '--portfolio-font': portfolioFontFamily() }">
+  <article class="portfolio-document portfolio-article" :class="{ 'portfolio-document-editable': editable }" :style="{ '--portfolio-font': portfolioFontFamily(defaultFont) }">
     <header v-if="showHeader" class="portfolio-document-header" :style="{ textAlign: titleAlign ?? 'left' }">
       <CoverImage v-if="post.coverImage" class="portfolio-document-cover" :src="post.coverImage" :author-id="post.author?.id" loading="eager" />
       <span v-if="post.visibility === 'PRIVATE'" class="portfolio-document-visibility"><Icon name="lock" :size="12" /> 비공개</span>
