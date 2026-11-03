@@ -20,6 +20,10 @@ const props = withDefaults(defineProps<{
   profile: HomeProfile;
   posts: BlogPost[];
   portfolioItems?: PortfolioItem[];
+  portfolioTotal?: number;
+  portfolioPageCount?: number;
+  portfolioLoading?: boolean;
+  portfolioError?: string;
   own?: boolean;
   postCount?: number;
   level?: HouseLevel;
@@ -53,7 +57,7 @@ const editableUser = computed(() => {
 });
 const tabs = computed(() => [
   { id: "blog" as const, label: props.own ? "내 블로그" : "블로그", count: props.posts.length },
-  { id: "portfolio" as const, label: props.own ? "내 포트폴리오" : "포트폴리오", count: props.portfolioItems.length },
+  { id: "portfolio" as const, label: props.own ? "내 포트폴리오" : "포트폴리오", count: props.portfolioTotal ?? props.portfolioItems.length },
 ]);
 const query = computed(() => search.value.trim().toLocaleLowerCase("ko-KR"));
 const categories = computed(() => categoryCounts(props.posts));
@@ -63,11 +67,11 @@ const filteredPosts = computed(() => props.posts.filter((post) =>
 const filteredPortfolios = computed(() => props.portfolioItems.filter((item) =>
   [item.title, item.summary].join(" ").toLocaleLowerCase("ko-KR").includes(query.value)));
 const pageSize = 8;
-const total = computed(() => section.value === "blog" ? filteredPosts.value.length : filteredPortfolios.value.length);
-const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+const total = computed(() => section.value === "blog" ? filteredPosts.value.length : props.portfolioTotal ?? filteredPortfolios.value.length);
+const pageCount = computed(() => section.value === "portfolio" && props.portfolioPageCount !== undefined ? Math.max(1, props.portfolioPageCount) : Math.max(1, Math.ceil(total.value / pageSize)));
 const visiblePosts = computed(() => filteredPosts.value.slice((page.value - 1) * pageSize, page.value * pageSize));
-const visiblePortfolios = computed(() => filteredPortfolios.value.slice((page.value - 1) * pageSize, page.value * pageSize));
-watch(pageCount, (count) => { if (page.value > count) page.value = count; });
+const visiblePortfolios = computed(() => props.portfolioTotal !== undefined ? props.portfolioItems : filteredPortfolios.value.slice((page.value - 1) * pageSize, page.value * pageSize));
+watch(pageCount, (count) => { if (!props.portfolioLoading && page.value > count) page.value = count; });
 watch([section, search, category], () => { page.value = 1; });
 function selectSection(value: Section) { section.value = value; }
 function editProfile() { profileNotice.value = ""; editing.value = true; }
@@ -138,10 +142,12 @@ watch(editableUser, (user) => { if (!user) closeEditor(); });
               <BlogCategories v-if="section === 'blog'" :categories="categories" :total="posts.length" :selected="category" @select="category = $event" />
               <div class="home-content-main">
             <div class="home-content-toolbar">
-              <BlogSearch v-model="search" :label="section === 'blog' ? '마이페이지 블로그 검색' : '마이페이지 포트폴리오 검색'" :placeholder="section === 'blog' ? '제목, 카테고리, 태그 검색' : '제목, 소개 검색'" />
+              <BlogSearch v-model="search" :label="section === 'blog' ? '마이페이지 블로그 검색' : '마이페이지 포트폴리오 검색'" :placeholder="section === 'blog' ? '제목, 카테고리, 태그 검색' : '제목 검색'" />
               <button v-if="editableUser" class="home-write" @click="emit('write', section)"><EditorIcon name="pen" />{{ section === 'blog' ? "글쓰기" : "포폴 쓰기" }}</button>
             </div>
-            <div v-if="section === 'blog' && visiblePosts.length" class="home-posts blog">
+            <div v-if="section === 'portfolio' && portfolioLoading" aria-busy="true"></div>
+            <p v-else-if="section === 'portfolio' && portfolioError" role="alert">{{ portfolioError }}</p>
+            <div v-else-if="section === 'blog' && visiblePosts.length" class="home-posts blog">
               <PostCard v-for="post in visiblePosts" :key="post.id" :post="post" compact @open="emit('post', post)" @prefetch="emit('prefetch', $event)" />
             </div>
             <PortfolioList v-else-if="section === 'portfolio' && visiblePortfolios.length" :items="visiblePortfolios" @select="emit('portfolio', $event)" />

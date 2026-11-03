@@ -18,6 +18,7 @@ export interface PortfolioInput {
     imageUrl?: string; imageAlt?: string; styles?: TextStyleInput[] } & BlockLayout)[];
 }
 export interface PortfolioDraft {
+  defaultFont?: string;
   title: string; titleRuns: PortfolioTextRun[]; titleAlign: string;
   coverImage?: string; visibility: string; blocks: PortfolioBlock[];
 }
@@ -95,7 +96,7 @@ export function portfolioPayload(draft: PortfolioDraft, fonts: PortfolioFont[], 
   return {
     title, titleAlign: draft.titleAlign.toUpperCase(),
     titleStyles: plainStyles(draft.title, draft.titleRuns, title, fonts),
-    defaultFontId: fontId("sans", fonts), representativeImageUrl: draft.coverImage,
+    defaultFontId: fontId(draft.defaultFont ?? "sans", fonts), representativeImageUrl: draft.coverImage,
     publicPortfolio: draft.visibility === "PUBLIC",
     blocks: draft.blocks.map((block) => {
       const layout = layouts.get(block.id);
