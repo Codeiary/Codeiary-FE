@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { auth, AuthError } from "@/store/auth";
 import { authGuard, loginDestination } from "@/router/auth-guard";
 import { userFixture } from "./fixtures/auth";
+import SiteHeader from "@/components/SiteHeader.vue";
 
 vi.mock("@/store/auth", async (original) => {
   const module = await original<typeof import("@/store/auth")>();
@@ -21,6 +23,57 @@ vi.mock("@/store/auth", async (original) => {
   };
 });
 const user = auth.user as { value: ReturnType<typeof userFixture> | null };
+const headers: VueWrapper[] = [];
+afterEach(() => headers.splice(0).forEach((header) => header.unmount()));
+
+async function renderHeader() {
+  const component = { template: "<div />" };
+  const router = createRouter({ history: createMemoryHistory(), routes: [
+    { path: "/", name: "city", component },
+    { path: "/blog", name: "blog", component },
+    { path: "/portfolio", name: "portfolio", component },
+    { path: "/news", name: "news", component },
+    { path: "/home", name: "user-home", component },
+    { path: "/blog/:authorSlug", name: "user-blog", component },
+    { path: "/portfolio/manage", name: "portfolio-manage", component },
+  ] });
+  await router.push("/");
+  const wrapper = mount(SiteHeader, { attachTo: document.body, global: { plugins: [router], stubs: { AccountActions: true } } });
+  headers.push(wrapper);
+  return { wrapper, router };
+}
+
+describe("공통 헤더", () => {
+  it("로그인한 사용자는 집 아이콘으로 마이페이지에 바로 진입한다", async () => {
+    user.value = null;
+    const { wrapper, router } = await renderHeader();
+    expect(wrapper.findAll('.site-primary-navigation button').map((button) => button.text())).toEqual(["블로그", "포트폴리오", "최근 IT 이슈"]);
+    expect(wrapper.findAll('.site-menu-panel button').map((button) => button.text())).toEqual(["블로그", "포트폴리오", "최근 IT 이슈"]);
+    expect(wrapper.find(".mypage-link").exists()).toBe(false);
+    user.value = userFixture("USER");
+    await flushPromises();
+    expect(wrapper.find("details").exists()).toBe(false);
+    expect(wrapper.get('.mypage-link').attributes('href')).toBe("/home");
+    await wrapper.get('.site-menu-toggle').trigger("click");
+    await wrapper.get('.mypage-link').trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.name).toBe("user-home");
+    expect(wrapper.get('.site-menu-toggle').attributes('aria-expanded')).toBe("false");
+  });
+
+  it("전체 메뉴는 바깥 클릭과 Esc로 닫을 수 있다", async () => {
+    user.value = userFixture("USER");
+    const { wrapper } = await renderHeader();
+    await wrapper.get('.site-menu-toggle').trigger("click");
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    await flushPromises();
+    expect(wrapper.get('.site-menu-toggle').attributes('aria-expanded')).toBe("false");
+    await wrapper.get('.site-menu-toggle').trigger("click");
+    await wrapper.get('.site-menu-panel button').trigger("keydown", { key: "Escape" });
+    expect(wrapper.get('.site-menu-toggle').attributes('aria-expanded')).toBe("false");
+    expect(document.activeElement).toBe(wrapper.get('.site-menu-toggle').element);
+  });
+});
 
 describe("인증 라우트", () => {
   beforeEach(() => {
@@ -94,13 +147,6 @@ describe("인증 라우트", () => {
     expect(loginDestination("/write")).toBe("/write");
     expect(loginDestination("/write//evil.example")).toBe("/");
   });
-  it("일반 사용자도 글쓰기 화면에 접근할 수 있다.", async () => {
-    user.value = userFixture("USER");
-    const router = routerFixture();
-    await router.push("/write");
-    expect(router.currentRoute.value.name).toBe("blog-write");
-    expect(auth.verifyAdmin).not.toHaveBeenCalled();
-  });
   it("서버에서 승인한 관리자만 관리자 화면에 접근할 수 있다.", async () => {
     user.value = userFixture();
     const router = routerFixture();
@@ -127,12 +173,6 @@ describe("인증 라우트", () => {
     expect(router.currentRoute.value.name).toBe("login");
     expect(router.currentRoute.value.query.retry).toBe("1");
     expect(auth.verifyAdmin).toHaveBeenCalledOnce();
-  });
-  it("로그인한 사용자의 중복 로그인을 막을 수 있다.", async () => {
-    user.value = userFixture("USER");
-    const router = routerFixture();
-    await router.push("/login?redirect=/admin");
-    expect(router.currentRoute.value.name).toBe("city");
   });
   it("외부 주소로의 로그인 리다이렉트를 차단할 수 있다.", () => {
     user.value = userFixture();

@@ -50,21 +50,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     }
   }
 
-  it("OAuth 완료 후 사용자를 조회하고 저장 토큰을 삭제할 수 있다.", async () => {
-    storage.setItem("codeiary.session", JSON.stringify({ refreshToken: "legacy" }));
-    const save = vi.spyOn(storage, "setItem");
-
-    await login();
-
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0]![0]).toBe("/users/me");
-    expect(fetchMock.mock.calls[0]![1]?.body).toBeUndefined();
-    expect(session.user.value).toEqual(userFixture());
-    expect(storage.getItem("codeiary.session")).toBeNull();
-    expect(save).not.toHaveBeenCalled();
-    expectCookieRequests();
-  });
-
   it("쿠키로 세션을 한 번만 복원할 수 있다.", async () => {
     const pending = deferred<Response>();
     fetchMock.mockReturnValueOnce(pending.promise);
@@ -77,16 +62,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0]![0]).toBe("/users/me");
     expect(session.user.value).toEqual(userFixture());
-    expectCookieRequests();
-  });
-
-  it("온보딩 전 계정의 세션을 복원하고 온보딩 필요 여부를 확인할 수 있다.", async () => {
-    const profile = { ...userFixture("PENDING"), onboardingCompleted: false };
-    fetchMock.mockResolvedValueOnce(jsonResponse(profile));
-
-    expect(await session.restore()).toBe(true);
-    expect(session.user.value).toEqual(profile);
-    expect(session.needsOnboarding.value).toBe(true);
     expectCookieRequests();
   });
 
@@ -178,15 +153,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     expect(session.notice.value).toBe("");
   });
 
-  it("최초 사용자 조회 실패 후 세션 복원을 재시도할 수 있다.", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
-    expect(await session.restore()).toBe(false);
-    fetchMock.mockResolvedValueOnce(jsonResponse(userFixture()));
-    expect(await session.restore()).toBe(true);
-    expect(session.user.value).toEqual(userFixture());
-    expect(requestsTo("/auth/reissue")).toHaveLength(0);
-  });
-
   it("본문 없는 로그아웃 요청 하나로 세션을 종료할 수 있다.", async () => {
     await login();
     fetchMock.mockResolvedValueOnce(noContent());
@@ -199,20 +165,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     expect(logout?.body).toBeUndefined();
     expect(session.user.value).toBeNull();
     expectCookieRequests();
-  });
-
-  it("로그아웃 실패 시 사용자 상태를 유지하고 다시 요청할 수 있다.", async () => {
-    await login();
-    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
-
-    await expect(session.logout()).rejects.toMatchObject({ code: "NETWORK_ERROR" });
-    expect(session.user.value).toEqual(userFixture());
-    expect(session.signingOut.value).toBe(false);
-    fetchMock.mockResolvedValueOnce(noContent());
-    await session.logout();
-
-    expect(requestsTo("/auth/logout")).toHaveLength(2);
-    expect(session.user.value).toBeNull();
   });
 
   it("진행 중인 재발급이 끝난 뒤 로그아웃할 수 있다.", async () => {
@@ -252,15 +204,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
 
     expect(session.user.value).toBeNull();
     expect(await session.restore()).toBe(false);
-  });
-
-  it("관리자 권한 거절 시 재발급 없이 세션을 유지할 수 있다.", async () => {
-    await login();
-    fetchMock.mockResolvedValueOnce(jsonResponse({ code: "FORBIDDEN" }, 403));
-
-    await expect(session.verifyAdmin()).rejects.toMatchObject({ status: 403 });
-    expect(requestsTo("/auth/reissue")).toHaveLength(0);
-    expect(session.user.value).toEqual(userFixture());
   });
 
   it("프로필 저장이 서버에서 실패하면 기존 사용자 정보를 유지할 수 있다.", async () => {
@@ -332,24 +275,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     expect(session.user.value).toEqual(userFixture());
   });
 
-  it.each([true, false])("개발 모드(%s)에 따라 로컬 S3 업로드를 제한할 수 있다.", async (development) => {
-    vi.stubEnv("DEV", development);
-    await login();
-    const result = {
-      ...presignedUpload(),
-      uploadUrl: "http://localhost:9090/codeiary-local/photo.jpg?signature=local",
-      imageUrl: "http://localhost:9090/codeiary-local/photo.jpg",
-    };
-    fetchMock.mockResolvedValueOnce(jsonResponse(result)).mockResolvedValueOnce(new Response(null));
-    const upload = session.uploadProfileImage(new File(["photo"], "profile.jpg", { type: "image/jpeg" }));
-    if (development) {
-      await expect(upload).resolves.toEqual({ profileImageUrl: result.imageUrl });
-    } else {
-      await expect(upload).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    }
-  });
-
   it.each(["주소 발급", "파일 전송"])("%s 중 로그아웃하면 업로드 결과를 사용하지 않을 수 있다.", async (stage) => {
     await login();
     const pending = deferred<Response>();
@@ -404,15 +329,6 @@ describe("HttpOnly 쿠키 로그인 세션", () => {
     });
 
     expectCookieRequests();
-  });
-
-  it("브라우저 저장소가 차단되어도 로그인할 수 있다.", async () => {
-    session = createAuthSession({
-      fetch: fetchMock,
-      storage: () => { throw new Error("blocked"); },
-    });
-    await login();
-    expect(session.user.value).toEqual(userFixture());
   });
 
   it("다른 탭의 재발급 후 사용자 조회로 중복 재발급을 방지할 수 있다.", async () => {

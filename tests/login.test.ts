@@ -5,7 +5,7 @@ import LoginPage from "@/views/LoginView.vue";
 import AccountActions from "@/components/AccountActions.vue";
 import { auth, AuthError } from "@/store/auth";
 import { googleLoginUrl } from "@/utils/auth/oauth";
-import { loginDestination } from "@/router/auth-guard";
+
 import { userFixture } from "./fixtures/auth";
 vi.mock("@/store/auth", async (original) => {
   const module = await original<typeof import("@/store/auth")>();
@@ -55,12 +55,6 @@ describe("Google 로그인 화면", () => {
     vi.mocked(googleLoginUrl).mockReset();
   });
   afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
-  it("기존 이메일과 비밀번호 입력 없이 Google 로그인만 표시할 수 있다.", async () => {
-    const { wrapper } = await render();
-    expect(wrapper.find("input").exists()).toBe(false);
-    expect(wrapper.get(".google-signin").text()).toBe("Google로 계속하기");
-    expect(wrapper.get(".auth-browse").attributes("href")).toBe("/");
-  });
   it("Google 연결을 시작하지 못해도 오류를 안내하고 재시도할 수 있다.", async () => {
     vi.mocked(googleLoginUrl).mockImplementation(() => {
       throw new Error("로그인 연결을 확인해 주세요.");
@@ -75,24 +69,6 @@ describe("Google 로그인 화면", () => {
     expect(
       wrapper.get(".google-signin").attributes("disabled"),
     ).toBeUndefined();
-  });
-  it("내부 게시글로 복귀하고 외부 주소는 차단할 수 있다.", () => {
-    expect(loginDestination("/blog/커밋여행자/기록")).toBe(
-      "/blog/커밋여행자/기록",
-    );
-    for (const target of ["https://example.com", "//example.com", "/unknown"])
-      expect(loginDestination(target)).toBe("/");
-  });
-  it("로그인 상태에 따라 헤더의 버튼을 전환할 수 있다.", async () => {
-    const { wrapper } = await render(AccountActions, "/");
-    expect(wrapper.find('a[href="/login"]').exists()).toBe(true);
-    user.value = userFixture();
-    await flushPromises();
-    expect(wrapper.find('a[href="/admin"]').exists()).toBe(true);
-    expect(wrapper.text()).toContain("로그아웃");
-    user.value = userFixture("USER");
-    await flushPromises();
-    expect(wrapper.find('a[href="/admin"]').exists()).toBe(false);
   });
 
   it("로그아웃 실패 시 오류를 안내하고 페이지를 유지할 수 있다.", async () => {

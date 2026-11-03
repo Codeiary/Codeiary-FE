@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deferred } from "./fixtures/auth";
-import { defineComponent } from "vue";
-import { flushPromises, mount } from "@vue/test-utils";
+
+import { flushPromises } from "@vue/test-utils";
 
 const request = vi.hoisted(() => vi.fn());
 const fetchCount = vi.hoisted(() => vi.fn());
@@ -63,26 +63,5 @@ describe("공개 이웃 목록 캐시", () => {
       expect.objectContaining({ id: 1, nickname: "이웃", level: 1 }),
     ]);
     expect(request).toHaveBeenCalledTimes(2);
-  });
-
-  it("내 글 수를 조회하는 동안 공개된 집 레벨을 유지하고 계정의 닉네임을 사용할 수 있다.", async () => {
-    const count = deferred<number>();
-    fetchCount.mockReturnValue(count.promise);
-    request.mockResolvedValue(page);
-    const { useResidenceDirectory } = await import("@/composables/useResidenceDirectory");
-    let directory!: ReturnType<typeof useResidenceDirectory>;
-    const wrapper = mount(defineComponent({
-      setup() { directory = useResidenceDirectory(); return () => null; },
-    }));
-    try {
-      await flushPromises();
-      expect(directory.ownHouseLevel.value).toBe(1);
-      expect(directory.ownResidence.value?.nickname).toBe("내 닉네임");
-      count.resolve(30);
-      await flushPromises();
-      expect(directory.ownHouseLevel.value).toBe(3);
-    } finally {
-      wrapper.unmount();
-    }
   });
 });

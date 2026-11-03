@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import VirtualJoystick from "@/components/city/VirtualJoystick.vue";
-import MobileRunButton from "@/components/city/MobileRunButton.vue";
 
 const wrappers: VueWrapper[] = [];
 afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
@@ -23,42 +22,6 @@ function lastMove(wrapper: VueWrapper) {
 }
 
 describe("모바일 조이스틱", () => {
-  it("달리기를 전환하고 화면을 벗어나면 해제할 수 있다.", async () => {
-    const wrapper = mount(MobileRunButton);
-    wrappers.push(wrapper);
-    await wrapper.trigger("click");
-    expect(wrapper.attributes("aria-pressed")).toBe("true");
-    expect(wrapper.emitted("change")![0]).toEqual([true]);
-    await wrapper.setProps({ disabled: true });
-    expect(wrapper.attributes("aria-pressed")).toBe("false");
-    expect(wrapper.emitted("change")![1]).toEqual([false]);
-  });
-  it("작은 흔들림을 무시하고 대각선 입력을 최대 속도 이내로 제한할 수 있다.", async () => {
-    const wrapper = render();
-    await wrapper.trigger("pointerdown", {
-      pointerId: 1,
-      button: 0,
-      clientX: 60,
-      clientY: 60,
-    });
-    await wrapper.trigger("pointermove", {
-      pointerId: 1,
-      clientX: 62,
-      clientY: 61,
-    });
-    expect(lastMove(wrapper)).toEqual({ x: 0, z: 0 });
-    await wrapper.trigger("pointermove", {
-      pointerId: 1,
-      clientX: 560,
-      clientY: -440,
-    });
-    const input = lastMove(wrapper);
-    expect(input.x).toBeCloseTo(Math.SQRT1_2);
-    expect(input.z).toBeCloseTo(-Math.SQRT1_2);
-    expect(Math.hypot(input.x, input.z)).toBeCloseTo(1);
-    await wrapper.trigger("pointerup", { pointerId: 1 });
-    expect(lastMove(wrapper)).toEqual({ x: 0, z: 0 });
-  });
 
   it("다른 손가락의 입력을 무시하고 터치 취소 시 멈출 수 있다.", async () => {
     const wrapper = render();

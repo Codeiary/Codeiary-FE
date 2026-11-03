@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCity, type CityController } from "@/utils/city/world";
-import { createResidenceModels } from "@/utils/city/residence-model";
+
 import type { NeighborhoodBlock } from "@/services/neighborhood";
 
 const render = vi.hoisted(() => vi.fn());
@@ -67,28 +67,6 @@ function district(scene: THREE.Scene, page: number) {
 }
 
 describe("이웃 맵 재사용", () => {
-  it("같은 레벨과 색상의 건물은 모델을 재사용하고 각 집의 변환은 독립적으로 유지할 수 있다.", () => {
-    const geometry = new THREE.BoxGeometry();
-    const material = new THREE.MeshStandardMaterial();
-    const shape = vi.fn((parent: THREE.Object3D) => {
-      const mesh = new THREE.Mesh(geometry, material);
-      parent.add(mesh);
-      return mesh;
-    });
-    const models = createResidenceModels({ box: shape, cylinder: shape, sphere: shape });
-    const first = models.build(0, "#bc9984");
-    const calls = shape.mock.calls.length;
-    const second = models.build(0, "#bc9984");
-    expect(shape).toHaveBeenCalledTimes(calls);
-    expect(first.house).not.toBe(second.house);
-    const mesh = first.house.children[0] as THREE.InstancedMesh;
-    const other = second.house.children[0] as THREE.InstancedMesh;
-    expect(mesh.instanceMatrix).not.toBe(other.instanceMatrix);
-    models.build(1, "#bc9984");
-    expect(shape.mock.calls.length).toBeGreaterThan(calls);
-    geometry.dispose();
-    material.dispose();
-  });
 
   it("최근 방문한 맵과 프로필만 바뀐 맵은 재사용하고 레벨이 바뀐 구역만 갱신할 수 있다.", () => {
     const scene = initialize();

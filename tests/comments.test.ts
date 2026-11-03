@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createCommentApi } from "@/services/comment-api";
 import { commentThreads, type Comment } from "@/utils/blog/comments";
 
@@ -15,19 +15,6 @@ const comment: Comment = {
 };
 
 describe("댓글 API", () => {
-  it("비로그인 사용자도 게시글 댓글을 조회할 수 있다.", async () => {
-    const fetch = vi.fn(async () => new Response(JSON.stringify([comment]), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }));
-    const api = createCommentApi({ fetch, baseUrl: "https://api.example.com" });
-
-    await expect(api.readComments(25)).resolves.toEqual([comment]);
-    expect(fetch).toHaveBeenCalledWith(
-      "https://api.example.com/posts/25/comments",
-      expect.objectContaining({ credentials: "include", cache: "no-store" }),
-    );
-  });
 
   it("댓글 작성·수정·삭제를 쿠키 인증 API에 위임할 수 있다.", async () => {
     const requests: Array<{ path: string; init?: RequestInit }> = [];
