@@ -41,7 +41,8 @@ import "@/assets/styles/blog.css";
 import "@/assets/styles/content-window.css";
 import { places, type Destination } from "@/utils/city/places";
 import { useResidenceDirectory } from "@/composables/useResidenceDirectory";
-import { portfolios } from "@/store/portfolio";
+import { portfolios, type PortfolioItem } from "@/store/portfolio";
+import { fetchPortfolio, fetchPortfolioPage, removePortfolio } from "@/services/portfolio-api";
 import PortfolioList from "@/components/portfolio/PortfolioList.vue";
 const PortfolioDocument = defineAsyncComponent(() => import("@/components/portfolio/PortfolioDocument.vue"));
 const PortfolioPdfButton = defineAsyncComponent(() => import("@/components/portfolio/PortfolioPdfButton.vue"));
@@ -104,7 +105,13 @@ const selectedPortfolio = computed(() => {
 });
 const portfolioSearch = ref("");
 const portfolioPage = ref(1);
-const latestPortfolios = computed(() => [...portfolios.value].sort((a, b) => b.id - a.id));
+const portfolioLoading = ref(false);
+const portfolioError = ref("");
+const portfolioDetail = shallowRef<PortfolioItem>();
+const portfolioListing = shallowRef<Awaited<ReturnType<typeof fetchPortfolioPage>>>();
+const homePortfolioListing = shallowRef<Awaited<ReturnType<typeof fetchPortfolioPage>>>();
+const homePortfolioLoading = ref(false);
+const homePortfolioError = ref("");
 function openPortfolio(item: (typeof portfolios.value)[number]) {
   void router.push({ query: { ...route.query, portfolioId: String(item.id) } });
 }
@@ -112,6 +119,7 @@ const deleteConfirmationOpen = ref(false);
 const deleteDialog = ref<HTMLDialogElement>();
 const deleteConfirmationText = ref("");
 const deleteError = ref("");
+const deletePending = ref(false);
 watch(deleteConfirmationOpen, async (open) => {
   if (!open) return deleteDialog.value?.close();
   await nextTick();
@@ -136,9 +144,7 @@ const homeProfile = computed<HomeProfile>(() => {
 const homePosts = computed(() =>
   homeBlogPosts(posts.value, homeProfile.value.owner, user.value?.id),
 );
-const homePortfolios = computed(() => latestPortfolios.value.filter((item) =>
-  item.author.id === homeProfile.value.owner.id
-  && (item.visibility === "PUBLIC" || item.author.id === user.value?.id)));
+const homePortfolios = computed(() => homePortfolioListing.value?.content ?? []);
 const homeTab = computed<"blog" | "portfolio">({
   get: () => route.query.tab === "portfolio" ? "portfolio" : "blog",
   set: (tab) => { void router.replace({ query: { ...route.query, tab: tab === "blog" ? undefined : tab, q: undefined, category: undefined, page: undefined } }); },
@@ -300,21 +306,54 @@ function rememberBlogScroll(event: Event) {
     saveBlogScroll(route.fullPath, target.scrollTop);
   }
 }
-const filteredPortfolios = computed(() => {
-  const query = portfolioSearch.value.trim().toLocaleLowerCase();
-  return latestPortfolios.value.filter((item) => item.visibility === "PUBLIC" &&
-    (!query || [item.title, item.summary].join(" ").toLocaleLowerCase().includes(query)));
-});
-const portfolioPageSize = 6;
-const portfolioPageCount = computed(() => Math.max(1, Math.ceil(filteredPortfolios.value.length / portfolioPageSize)));
-const visiblePortfolios = computed(() => {
-  const start = (portfolioPage.value - 1) * portfolioPageSize;
-  return filteredPortfolios.value.slice(start, start + portfolioPageSize);
-});
+const portfolioPageCount = computed(() => Math.max(1, portfolioListing.value?.totalPages ?? 1));
+const visiblePortfolios = computed(() => portfolioListing.value?.content ?? []);
 watch(portfolioSearch, () => { portfolioPage.value = 1; });
-watch(portfolioPageCount, (count) => { portfolioPage.value = Math.min(portfolioPage.value, count); });
-const portfolio = computed(() => portfolios.value.find((item) => item.id === selectedPortfolio.value
-  && (item.visibility === "PUBLIC" || item.author.id === user.value?.id)));
+const portfolio = computed(() => portfolioDetail.value);
+let portfolioRequest = 0;
+let homePortfolioRequest = 0;
+const portfolioMounted = ref(false);
+watch([portfolioMounted, section, selectedPortfolio, portfolioPage, portfolioSearch, () => selectedPortfolio.value ? user.value?.id : undefined],
+  async () => {
+    const revision = ++portfolioRequest;
+    portfolioDetail.value = undefined;
+    portfolioError.value = "";
+    portfolioLoading.value = false;
+    if (!portfolioMounted.value || section.value !== "portfolio") return;
+    portfolioLoading.value = true;
+    try {
+      if (selectedPortfolio.value) {
+        await auth.restore();
+        if (revision !== portfolioRequest) return;
+        const item = await fetchPortfolio(selectedPortfolio.value);
+        if (revision === portfolioRequest) {
+          portfolioDetail.value = item;
+          portfolios.value = [...portfolios.value.filter((cached) => cached.id !== item.id), item];
+        }
+      } else {
+        const page = await fetchPortfolioPage({ page: portfolioPage.value - 1, search: portfolioSearch.value });
+        if (revision === portfolioRequest) portfolioListing.value = page;
+      }
+    } catch (error) {
+      if (revision === portfolioRequest) portfolioError.value = error instanceof Error ? error.message : "포트폴리오를 불러오지 못했어요.";
+    } finally { if (revision === portfolioRequest) portfolioLoading.value = false; }
+  }, { immediate: true });
+watch([portfolioMounted, section, homeTab, homeSearch, homePage, () => homeProfile.value.owner.id, () => user.value?.id],
+  async () => {
+    const revision = ++homePortfolioRequest;
+    homePortfolioListing.value = undefined;
+    homePortfolioError.value = "";
+    homePortfolioLoading.value = false;
+    if (!portfolioMounted.value || section.value !== "home" || homeTab.value !== "portfolio" || !homeProfile.value.owner.id) return;
+    homePortfolioLoading.value = true;
+    try {
+      const page = await fetchPortfolioPage({ mine: homeProfile.value.owner.id === user.value?.id,
+        authorId: Number(homeProfile.value.owner.id), search: homeSearch.value, page: homePage.value - 1, size: 8 });
+      if (revision === homePortfolioRequest) homePortfolioListing.value = page;
+    } catch (error) {
+      if (revision === homePortfolioRequest) homePortfolioError.value = error instanceof Error ? error.message : "포트폴리오를 불러오지 못했어요.";
+    } finally { if (revision === homePortfolioRequest) homePortfolioLoading.value = false; }
+  }, { immediate: true });
 const canManagePortfolio = computed(() => !!user.value && portfolio.value?.author.id === user.value.id);
 const publishedPortfolio = computed(() => portfolio.value ? ({
   title: portfolio.value.title,
@@ -636,8 +675,11 @@ onBeforeUnmount(() => {
   prefetchedArticle = undefined;
   postsRequest++;
   articleRequest++;
+  portfolioRequest++;
+  homePortfolioRequest++;
 });
 onMounted(() => {
+  portfolioMounted.value = true;
   if (bootstrap) bootstrap.url = "";
   restoreBlogScroll(readBlogScroll(route.fullPath));
 });
@@ -653,15 +695,25 @@ function managePortfolio(action: "write" | "edit" | "delete") {
   deleteError.value = "";
   deleteConfirmationOpen.value = true;
 }
-function deleteCurrentPortfolio() {
+async function deleteCurrentPortfolio() {
   const item = portfolio.value;
-  if (!item || !canManagePortfolio.value || deleteConfirmationText.value !== "삭제") return;
-  portfolios.value = portfolios.value.filter((portfolioItem) => portfolioItem.id !== item.id);
-  deleteConfirmationOpen.value = false;
-  const query = { ...route.query };
-  delete query.portfolioId;
-  void router.replace({ query });
+  if (!item || !canManagePortfolio.value || deleteConfirmationText.value !== "삭제" || deletePending.value) return;
+  deletePending.value = true;
+  deleteError.value = "";
+  try {
+    await removePortfolio(item.id);
+    portfolios.value = portfolios.value.filter((portfolioItem) => portfolioItem.id !== item.id);
+    deleteConfirmationOpen.value = false;
+    const query = { ...route.query };
+    delete query.portfolioId;
+    await router.replace({ query });
+  } catch (error) {
+    deleteError.value = error instanceof Error ? error.message : "포트폴리오를 삭제하지 못했어요. 다시 시도해 주세요.";
+  } finally {
+    deletePending.value = false;
+  }
 }
+
 </script>
 
 <template>
@@ -682,7 +734,7 @@ function deleteCurrentPortfolio() {
         aria-modal="true"
         aria-labelledby="post-delete-title"
         aria-describedby="post-delete-description"
-        @cancel.prevent="deleteConfirmationOpen = false"
+        @cancel.prevent="!deletePending && (deleteConfirmationOpen = false)"
       >
         <div>
           <h2 id="post-delete-title">{{ section === 'portfolio' ? '포트폴리오를 삭제할까요?' : '게시글을 삭제할까요?' }}</h2>
@@ -699,6 +751,7 @@ function deleteCurrentPortfolio() {
         <input
           id="post-delete-input"
           v-model="deleteConfirmationText"
+          :disabled="deletePending"
           class="post-delete-input"
           autocomplete="off"
           spellcheck="false"
@@ -708,11 +761,12 @@ function deleteCurrentPortfolio() {
         <div class="post-delete-confirmation-actions">
           <button
             class="post-delete-cancel"
+            :disabled="deletePending"
             @click="deleteConfirmationOpen = false"
           >
             취소
           </button>
-          <button class="post-delete-submit" :disabled="deleteConfirmationText !== '삭제'" @click="section === 'portfolio' ? deleteCurrentPortfolio() : deleteCurrentPost()">
+          <button class="post-delete-submit" :disabled="deletePending || deleteConfirmationText !== '삭제'" @click="section === 'portfolio' ? deleteCurrentPortfolio() : deleteCurrentPost()">
             삭제
           </button>
         </div>
@@ -738,6 +792,10 @@ function deleteCurrentPortfolio() {
         :profile="homeProfile"
         :posts="homePosts"
         :portfolio-items="homePortfolios"
+        :portfolio-total="homePortfolioListing?.totalElements"
+        :portfolio-page-count="homePortfolioListing?.totalPages"
+        :portfolio-loading="homePortfolioLoading"
+        :portfolio-error="homePortfolioError"
         v-model:tab="homeTab"
         v-model:search="homeSearch"
         v-model:page="homePage"
@@ -856,11 +914,14 @@ function deleteCurrentPortfolio() {
         </div>
       </template>
       <template v-else-if="section === 'portfolio'">
-        <div v-if="portfolio" class="window-body portfolio-view">
+        <div v-if="portfolioLoading && selectedPortfolio" class="window-body portfolio-view" aria-busy="true"></div>
+        <div v-else-if="portfolioError && selectedPortfolio" class="window-body portfolio-view" role="alert">{{ portfolioError }}</div>
+        <div v-else-if="selectedPortfolio && portfolio" class="window-body portfolio-view">
               <PortfolioDocument
                 v-if="publishedPortfolio"
                 :key="portfolio.id"
                 :post="publishedPortfolio"
+                :default-font="portfolio.defaultFont"
                 :title-runs="portfolio.titleRuns"
                 :title-align="portfolio.titleAlign"
                 :blocks="portfolio.blocks"
@@ -871,7 +932,7 @@ function deleteCurrentPortfolio() {
                 </template>
               </PortfolioDocument>
         </div>
-        <div v-else class="window-body portfolio-view">
+        <div v-else-if="!selectedPortfolio" class="window-body portfolio-view">
           <header class="blog-list-heading portfolio-list-heading">
             <span class="section-kicker">01 / PORTFOLIO</span>
           </header>
@@ -879,15 +940,17 @@ function deleteCurrentPortfolio() {
           <div class="portfolio-toolbar">
             <BlogSearch
               :model-value="portfolioSearch"
-              placeholder="제목, 소개 검색"
+              placeholder="제목 검색"
               label="포트폴리오 검색"
               @update:model-value="portfolioSearch = $event"
             />
           </div>
 
-          <PortfolioList v-if="visiblePortfolios.length" :items="visiblePortfolios" @select="openPortfolio" />
-          <BlogPagination v-if="filteredPortfolios.length" label="포트폴리오 페이지" :page="portfolioPage" :page-count="portfolioPageCount" @select="portfolioPage = $event" />
-          <div v-if="!filteredPortfolios.length" class="content-empty"><Icon name="case" :size="25" /><p>{{ portfolioSearch.trim() ? '검색 결과가 없어요. 다른 검색어로 찾아보세요.' : '아직 공개된 포트폴리오가 없어요.' }}</p></div>
+          <div v-if="portfolioLoading" aria-busy="true"></div>
+          <p v-else-if="portfolioError" role="alert">{{ portfolioError }}</p>
+          <PortfolioList v-else-if="visiblePortfolios.length" :items="visiblePortfolios" @select="openPortfolio" />
+          <BlogPagination v-if="!portfolioLoading && !portfolioError && portfolioListing?.totalElements" label="포트폴리오 페이지" :page="portfolioPage" :page-count="portfolioPageCount" @select="portfolioPage = $event" />
+          <div v-if="!portfolioLoading && !portfolioError && !visiblePortfolios.length" class="content-empty"><Icon name="case" :size="25" /><p>{{ portfolioSearch.trim() ? '검색 결과가 없어요. 다른 검색어로 찾아보세요.' : '아직 공개된 포트폴리오가 없어요.' }}</p></div>
         </div>
       </template>
       <div v-else-if="section === 'news'" class="window-body">

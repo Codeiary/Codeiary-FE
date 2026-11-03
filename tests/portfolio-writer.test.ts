@@ -9,10 +9,16 @@ import { auth, type UserProfile } from "@/store/auth";
 import { portfolios, type PortfolioItem } from "@/store/portfolio";
 import { contentFromEditorDocument } from "@/utils/portfolio/rich-text";
 import { userFixture } from "./fixtures/auth";
-import { createPortfolio, fetchPortfolioFonts } from "@/services/portfolio-api";
+import { createPortfolio, fetchPortfolioFonts, fetchPortfolio, updatePortfolio } from "@/services/portfolio-api";
 
 vi.mock("@/services/portfolio-api", () => ({
   createPortfolio: vi.fn(async () => ({ id: 700 })),
+  updatePortfolio: vi.fn(async () => {}),
+  fetchPortfolio: vi.fn(async (id: number) => {
+    const item = portfolios.value.find((item) => item.id === id);
+    if (!item) throw new Error("포트폴리오를 찾을 수 없어요.");
+    return copy(item);
+  }),
   fetchPortfolioFonts: vi.fn(async () => [
     { id: 1, code: "sans" }, { id: 2, code: "serif" }, { id: 3, code: "mono" }, { id: 9, code: "jua" },
   ]),
@@ -173,21 +179,31 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
     vi.unstubAllGlobals();
   });
 
-  it("수정 API가 없는 기존 포트폴리오는 저장됐다고 표시하거나 캐시를 변경하지 않는다", async () => {
+  it("캐시가 없는 수정 주소도 서버에서 불러오고 실패 시 초안을 유지한 뒤 PUT으로 재시도한다", async () => {
     const original: PortfolioItem = {
       id: 42, author: { id: 1, name: "기록자" }, title: "기존 작업", summary: "기존 요약", content: "## 구현 기록",
       visibility: "PRIVATE", blocks: [{ id: "legacy-body", type: "markdown", content: "## 구현 기록", align: "left" }],
     };
-    portfolios.value = [copy(original)];
+    vi.mocked(fetchPortfolio).mockResolvedValueOnce(copy(original));
     const { wrapper, router } = await render(42);
+    expect(fetchPortfolio).toHaveBeenCalledWith(42);
+    expect(portfolios.value).toHaveLength(0);
     await canvasBlocks(wrapper)[0]!.trigger("click");
     await writeCanvas(wrapper, "수정 중인 본문");
+    vi.mocked(updatePortfolio).mockRejectedValueOnce(new Error("수정 실패"));
     await button(wrapper, "저장").trigger("click");
     await flushPromises();
     expect(router.currentRoute.value.name).toBe("portfolio-write");
-    expect(wrapper.get('[role="alert"]').text()).toContain("새 포트폴리오 저장만 가능");
-    expect(portfolios.value[0]).toEqual(original);
+    expect(wrapper.get('[role="alert"]').text()).toContain("수정 실패");
+    expect(canvasText(wrapper)).toContain("수정 중인 본문");
+    expect(portfolios.value).toHaveLength(0);
+    await button(wrapper, "저장").trigger("click");
+    await flushPromises();
+    expect(updatePortfolio).toHaveBeenLastCalledWith(42, expect.objectContaining({ title: "기존 작업", publicPortfolio: false }));
     expect(createPortfolio).not.toHaveBeenCalled();
+    expect(router.currentRoute.value.query.portfolioId).toBe("42");
+    expect(portfolios.value).toHaveLength(1);
+    expect(portfolios.value[0]?.content).toContain("수정 중인 본문");
   });
 
   it("저장 실패 시 입력 내용을 유지하고 성공 응답의 ID로 이동한다", async () => {

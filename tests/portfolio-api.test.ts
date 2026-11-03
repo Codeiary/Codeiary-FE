@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { portfolioPayload, measurePortfolioBlocks } from "@/utils/portfolio/api-payload";
 import { portfolioFontFamily } from "@/utils/portfolio/fonts";
-import { createPortfolio } from "@/services/portfolio-api";
+import { createPortfolio, updatePortfolio, removePortfolio } from "@/services/portfolio-api";
 import { auth } from "@/store/auth";
 
 vi.mock("@/store/auth", () => ({ auth: { authorizedRequest: vi.fn(async () => ({ id: 901 })) } }));
@@ -63,4 +63,12 @@ describe("포트폴리오 저장 요청", () => {
     expect(await createPortfolio(input)).toEqual({ id: 901 });
     expect(auth.authorizedRequest).toHaveBeenCalledWith("/portfolios", expect.objectContaining({ method: "POST", body: JSON.stringify(input) }));
   });
+  it("수정과 삭제를 동일한 서버 ID의 인증 API로 보낸다", async () => {
+    const input = { title: "수정", titleAlign: "LEFT", titleStyles: [], defaultFontId: 8, publicPortfolio: false, blocks: [] };
+    await updatePortfolio(42, input);
+    expect(auth.authorizedRequest).toHaveBeenLastCalledWith("/portfolios/42", expect.objectContaining({ method: "PUT", body: JSON.stringify(input) }));
+    await removePortfolio(42);
+    expect(auth.authorizedRequest).toHaveBeenLastCalledWith("/portfolios/42", { method: "DELETE" });
+  });
+
 });

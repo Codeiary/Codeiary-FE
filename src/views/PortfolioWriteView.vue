@@ -10,8 +10,8 @@ import PortfolioTextAlignment from "@/components/portfolio/PortfolioTextAlignmen
 import PortfolioDocument from "@/components/portfolio/PortfolioDocument.vue";
 import PortfolioPdfButton from "@/components/portfolio/PortfolioPdfButton.vue";
 import { auth } from "@/store/auth";
-import { portfolios } from "@/store/portfolio";
-import { createPortfolio, fetchPortfolioFonts } from "@/services/portfolio-api";
+import { portfolios, type PortfolioItem } from "@/store/portfolio";
+import { createPortfolio, fetchPortfolioFonts, fetchPortfolio, updatePortfolio } from "@/services/portfolio-api";
 import { measurePortfolioBlocks, portfolioPayload } from "@/utils/portfolio/api-payload";
 import {
   blocksFromMarkdown, blocksToMarkdown, createPortfolioBlock,
@@ -23,9 +23,10 @@ import "@/assets/styles/content-window.css";
 const route = useRoute();
 const router = useRouter();
 const user = computed(() => auth.user.value);
-const existing = computed(() => portfolios.value.find((item) => item.id === Number(route.query.id)));
+const existing = ref<PortfolioItem>();
 const draft = reactive({
   title: "",
+  defaultFont: "sans",
   titleRuns: [] as PortfolioTextRun[],
   titleAlign: "left" as "left" | "center" | "right",
   coverImage: undefined as string | undefined,
@@ -44,7 +45,7 @@ const coverInput = ref<HTMLInputElement>();
 const canvas = ref<HTMLElement>();
 let uploadTarget = "";
 const canEdit = computed(() => !!user.value && (!route.query.id || existing.value?.author.id === user.value.id));
-const busy = computed(() => saving.value || uploading.value || !canEdit.value);
+const busy = computed(() => loading.value || saving.value || uploading.value || !canEdit.value);
 const blockTypes: { type: PortfolioBlockType; label: string; icon?: string; text?: string }[] = [
   { type: "text", label: "텍스트", text: "T" },
   { type: "image", label: "이미지", icon: "image" },
@@ -165,10 +166,6 @@ async function save() {
   const owner = user.value;
   if (busy.value || !owner) return;
   error.value = "";
-  if (existing.value) {
-    error.value = "현재는 새 포트폴리오 저장만 가능해요.";
-    return;
-  }
   if (!draft.title.trim()) {
     error.value = "제목을 입력해 주세요.";
     previewOnly.value = false;
@@ -205,8 +202,12 @@ async function save() {
       blocks: draft.blocks.map((block) => ({ ...block })),
       visibility: draft.visibility,
     };
-    const { id } = await createPortfolio(input);
-    portfolios.value.unshift({ ...data, id, author: { id: owner.id, name: owner.nickname || owner.name } });
+    let id = existing.value?.id;
+    if (id) await updatePortfolio(id, input);
+    else id = (await createPortfolio(input)).id;
+    portfolios.value = [{ ...data, defaultFont: draft.defaultFont, id,
+      author: existing.value?.author ?? { id: owner.id, name: owner.nickname || owner.name } },
+      ...portfolios.value.filter((item) => item.id !== id)];
     savedSnapshot.value = snapshot();
     await router.push({ name: "portfolio", query: { portfolioId: String(id) } });
   } catch (reason) {
@@ -215,27 +216,47 @@ async function save() {
     saving.value = false;
   }
 }
-onMounted(() => {
-  if (!user.value) error.value = "포트폴리오를 작성하려면 로그인해 주세요.";
-  else if (route.query.id && !existing.value) error.value = "수정할 포트폴리오를 찾지 못했어요.";
-  else if (!canEdit.value) error.value = "내가 작성한 포트폴리오만 수정할 수 있어요.";
-  else if (existing.value) {
-    Object.assign(draft, {
-      title: existing.value.title, titleRuns: existing.value.titleRuns?.map((run) => ({ ...run })) ?? [], titleAlign: existing.value.titleAlign ?? "left", coverImage: existing.value.coverImage,
-      blocks: existing.value.blocks?.map((block) => ({ ...block })) ?? blocksFromMarkdown(existing.value.content),
-      visibility: existing.value.visibility,
-    });
+let loadRequest = 0;
+async function loadDraft() {
+  const revision = ++loadRequest;
+  loading.value = true;
+  error.value = "";
+  existing.value = undefined;
+  Object.assign(draft, { title: "", defaultFont: "sans", titleRuns: [], titleAlign: "left", coverImage: undefined, blocks: [], visibility: "PUBLIC" });
+  try {
+    if (!user.value) throw new Error("포트폴리오를 작성하려면 로그인해 주세요.");
+    if (route.query.id) {
+      const id = Number(route.query.id);
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error("수정할 포트폴리오를 찾지 못했어요.");
+      const item = await fetchPortfolio(id);
+      if (revision !== loadRequest) return;
+      if (item.author.id !== user.value?.id) throw new Error("내가 작성한 포트폴리오만 수정할 수 있어요.");
+      existing.value = item;
+      Object.assign(draft, {
+        title: item.title, defaultFont: item.defaultFont ?? "sans", titleRuns: item.titleRuns ?? [], titleAlign: item.titleAlign ?? "left", coverImage: item.coverImage,
+        blocks: item.blocks ?? blocksFromMarkdown(item.content), visibility: item.visibility,
+      });
+    }
+    selectedId.value = draft.blocks[0]?.id ?? PORTFOLIO_TITLE_ID;
+    if (existing.value) inspector.value = "design";
+    await nextTick();
+    history.value = [snapshot()];
+    historyIndex.value = 0;
+    savedSnapshot.value = snapshot();
+  } catch (reason) {
+    if (revision === loadRequest) error.value = reason instanceof Error ? reason.message : "포트폴리오를 불러오지 못했어요.";
+  } finally {
+    if (revision === loadRequest) loading.value = false;
   }
-  selectedId.value = draft.blocks[0]?.id ?? PORTFOLIO_TITLE_ID;
-  if (existing.value) inspector.value = "design";
-  history.value = [snapshot()];
-  historyIndex.value = 0;
-  savedSnapshot.value = snapshot();
-  loading.value = false;
+}
+watch(() => route.query.id, () => { void loadDraft(); });
+onMounted(() => {
+  void loadDraft();
   window.addEventListener("keydown", keyboardSave);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onBeforeUnmount(() => {
+  loadRequest++;
   window.removeEventListener("keydown", keyboardSave);
   window.removeEventListener("beforeunload", beforeUnload);
 });
@@ -268,7 +289,7 @@ onBeforeUnmount(() => {
       <section class="portfolio-studio-canvas-column" aria-label="포트폴리오 캔버스">
         <div class="portfolio-canvas-scroll">
           <div ref="canvas" class="portfolio-canvas-page" :class="{ 'is-empty': !draft.blocks.length }">
-            <PortfolioDocument :post="previewPost" :title-runs="draft.titleRuns" :title-align="draft.titleAlign" :blocks="draft.blocks" :editable="!previewOnly && canEdit && !saving" :selected-block="selectedId" toolbar-target="#portfolio-text-tools" @update:title="draft.title = $event" @update:title-runs="draft.titleRuns = $event" @update-block="updateBlock" @select-block="selectBlock" />
+            <PortfolioDocument :post="previewPost" :default-font="draft.defaultFont" :title-runs="draft.titleRuns" :title-align="draft.titleAlign" :blocks="draft.blocks" :editable="!previewOnly && canEdit && !saving" :selected-block="selectedId" toolbar-target="#portfolio-text-tools" @update:title="draft.title = $event" @update:title-runs="draft.titleRuns = $event" @update-block="updateBlock" @select-block="selectBlock" />
             <div v-if="!draft.blocks.length && !previewOnly" class="portfolio-canvas-empty">
               <button class="portfolio-empty-mark" aria-label="텍스트 추가" :disabled="busy" @click="addBlock('text')"><Icon name="plus" :size="28" /></button>
             </div>
