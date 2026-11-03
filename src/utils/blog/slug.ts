@@ -19,3 +19,7 @@ export function authorSlug(name: string) {
       .replace(/^-+|-+$/g, "") || "blog"
   );
 }
+
+export function postPath(authorName: string, title: string, id: number, slug?: string) {
+  return `/blog/${encodeURIComponent(authorSlug(authorName))}/${encodeURIComponent(slug || postSlug(title))}/${id}`;
+}

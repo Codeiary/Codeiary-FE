@@ -97,20 +97,24 @@ function scrollToHeading(id: string) {
         >
       </div>
       <div class="article-meta">
-        <component
-          :is="interactive ? 'button' : 'span'"
-          v-if="post.author"
-          class="blog-author-link"
-          :aria-label="
-            interactive
-              ? `${displayName(post.author)}의 블로그 보기`
-              : undefined
-          "
-          @click="interactive && $emit('selectAuthor', post.author)"
-          >{{ displayName(post.author) }}</component
-        >
-        <span v-else>작성자 정보 없음</span>
-        <span>·</span>{{ post.date }}
+        <div class="article-byline">
+          <component
+            :is="interactive ? 'button' : 'span'"
+            v-if="post.author"
+            class="blog-author-link"
+            :aria-label="
+              interactive
+                ? `${displayName(post.author)}의 블로그 보기`
+                : undefined
+            "
+            @click="interactive && $emit('selectAuthor', post.author)"
+            >{{ displayName(post.author) }}</component
+          >
+          <span v-else>작성자 정보 없음</span>
+          <span aria-hidden="true">·</span>
+          <time>{{ post.date }}</time>
+        </div>
+        <div class="article-header-actions"><slot name="actions" /></div>
       </div>
     </header>
     <div class="post-article-body">

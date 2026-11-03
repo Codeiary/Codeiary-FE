@@ -2,6 +2,7 @@
 import { displayName } from "@/utils/profile/display-name";
 import {
   computed,
+  defineAsyncComponent,
   inject,
   nextTick,
   onBeforeUnmount,
@@ -20,7 +21,8 @@ import { loadMarkdownContent } from "@/utils/blog/markdown-loader";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
 import { authorSlug, postSlug } from "@/utils/blog/slug";
 import BlogPostList from "@/components/blog/BlogPostList.vue";
-import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
+import BlogSearch from "@/components/blog/BlogSearch.vue";
+import BlogPagination from "@/components/blog/BlogPagination.vue";
 import PostArticle from "@/components/blog/PostArticle.vue";
 import PostComments from "@/components/blog/comments/PostComments.vue";
 import PostLikeButton from "@/components/blog/PostLikeButton.vue";
@@ -39,18 +41,27 @@ import "@/assets/styles/blog.css";
 import "@/assets/styles/content-window.css";
 import { places, type Destination } from "@/utils/city/places";
 import { useResidenceDirectory } from "@/composables/useResidenceDirectory";
+import { portfolios } from "@/store/portfolio";
+import PortfolioList from "@/components/portfolio/PortfolioList.vue";
+const PortfolioDocument = defineAsyncComponent(() => import("@/components/portfolio/PortfolioDocument.vue"));
+const PortfolioPdfButton = defineAsyncComponent(() => import("@/components/portfolio/PortfolioPdfButton.vue"));
 const route = useRoute();
 const router = useRouter();
 const { user } = auth;
 function navigationPostId() {
+  if (route.name !== "blog-post" && route.name !== "blog-post-legacy") return undefined;
+  const routeId = Number(route.params.postId);
+  if (Number.isSafeInteger(routeId) && routeId > 0) return routeId;
   const id = router.options.history.state.postId;
-  return route.name === "blog-post" && typeof id === "number" && Number.isSafeInteger(id) && id > 0
+  return typeof id === "number" && Number.isSafeInteger(id) && id > 0
     ? id : undefined;
 }
 function matchesArticle(post: BlogPost) {
-  return post.author &&
-    (authorSlug(post.author.name) === route.params.authorSlug || String(post.author.id) === route.params.authorSlug) &&
-    (post.slug || postSlug(post.title)) === route.params.postSlug;
+  const id = Number(route.params.postId);
+  if (Number.isSafeInteger(id) && id > 0) return post.id === id;
+  if (!post.author || (authorSlug(post.author.name) !== route.params.authorSlug && String(post.author.id) !== route.params.authorSlug))
+    return false;
+  return (post.slug || postSlug(post.title)) === route.params.postSlug;
 }
 let savedArticle = import.meta.env.SSR ? undefined : takeSavedPost(navigationPostId(), user.value?.id);
 if (savedArticle && !matchesArticle(savedArticle)) savedArticle = undefined;
@@ -87,10 +98,25 @@ const { directory, ownResidence, ownHouseLevel, loaded: residentsLoaded } = useR
   computed(() => section.value === "home" || route.name === "user-blog"),
 );
 const pageElement = ref<HTMLElement>();
-const selectedProject = ref<number | null>(null);
-const newsSelection = ref<number | null>(null);
+const selectedPortfolio = computed(() => {
+  const id = Number(route.query.portfolioId);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+});
+const portfolioSearch = ref("");
+const portfolioPage = ref(1);
+const latestPortfolios = computed(() => [...portfolios.value].sort((a, b) => b.id - a.id));
+function openPortfolio(item: (typeof portfolios.value)[number]) {
+  void router.push({ query: { ...route.query, portfolioId: String(item.id) } });
+}
 const deleteConfirmationOpen = ref(false);
+const deleteDialog = ref<HTMLDialogElement>();
+const deleteConfirmationText = ref("");
 const deleteError = ref("");
+watch(deleteConfirmationOpen, async (open) => {
+  if (!open) return deleteDialog.value?.close();
+  await nextTick();
+  deleteDialog.value?.showModal();
+});
 const visitingResident = computed(() =>
   directory.value.find(
     (resident) => String(resident.id) === route.query.resident,
@@ -105,13 +131,30 @@ const homeProfile = computed<HomeProfile>(() => {
     email: resident.email ?? "",
     github: resident.github ?? "",
     profileImageUrl: resident.profileImageUrl,
-    projects: [],
-    issues: [],
   };
 });
 const homePosts = computed(() =>
   homeBlogPosts(posts.value, homeProfile.value.owner, user.value?.id),
 );
+const homePortfolios = computed(() => latestPortfolios.value.filter((item) =>
+  item.author.id === homeProfile.value.owner.id
+  && (item.visibility === "PUBLIC" || item.author.id === user.value?.id)));
+const homeTab = computed<"blog" | "portfolio">({
+  get: () => route.query.tab === "portfolio" ? "portfolio" : "blog",
+  set: (tab) => { void router.replace({ query: { ...route.query, tab: tab === "blog" ? undefined : tab, q: undefined, category: undefined, page: undefined } }); },
+});
+const homeSearch = computed({
+  get: () => typeof route.query.q === "string" ? route.query.q : "",
+  set: (q: string) => { void router.replace({ query: { ...route.query, q: q || undefined, page: undefined } }); },
+});
+const homePage = computed({
+  get: () => blogPageNumber(route.query.page),
+  set: (page: number) => { void router.replace({ query: { ...route.query, page: page > 1 ? String(page) : undefined } }); },
+});
+const homeCategory = computed({
+  get: () => typeof route.query.category === "string" ? route.query.category : "",
+  set: (category: string) => { void router.replace({ query: { ...route.query, category: category || undefined, page: undefined } }); },
+});
 const storageError = ref("");
 const postsLoading = ref(false);
 const postPageCache = new Map<string, { value: BlogPage; at: number }>();
@@ -135,7 +178,7 @@ let postsRequest = 0;
 async function loadBlogPosts() {
   const request = ++postsRequest;
   const isPublicList = route.name === "blog";
-  const isArticle = route.name === "blog-post";
+  const isArticle = route.name === "blog-post" || route.name === "blog-post-legacy";
   const needsCatalog = route.name === "user-blog" || section.value === "home"
     || (isArticle && !navigationPostId() && !posts.value.some(matchesArticle));
   storageError.value = "";
@@ -172,9 +215,7 @@ async function loadBlogPosts() {
     const key = JSON.stringify([user.value?.id, params]);
     const stored = cached(catalogCache, key);
     postsLoading.value = !stored;
-    const selectedPost = posts.value.find((post) => post.author &&
-      authorSlug(post.author.name) === route.params.authorSlug &&
-      (post.slug || postSlug(post.title)) === route.params.postSlug);
+    const selectedPost = posts.value.find(matchesArticle);
     let result = stored;
     if (!result) {
       const [publicPosts, ownPosts] = await Promise.all([
@@ -259,70 +300,33 @@ function rememberBlogScroll(event: Event) {
     saveBlogScroll(route.fullPath, target.scrollTop);
   }
 }
-const projects = [
-  {
-    id: 1,
-    number: "01",
-    title: "Codeiary",
-    type: "INTERACTIVE WEB",
-    summary: "개발자의 이야기를 탐험하는 3D 블로그.",
-    description:
-      "웹페이지를 하나의 동네로 재해석한 인터랙티브 개인 블로그입니다. 방향키 이동, 건물 입장, 자동 경로 탐색을 통해 콘텐츠를 만날 수 있습니다.",
-    tags: ["Vue 3", "Three.js", "TypeScript"],
-    art: "city",
-    year: "2026",
-  },
-  {
-    id: 2,
-    number: "02",
-    title: "Ordinary",
-    type: "PRODUCT CONCEPT",
-    summary: "평범한 하루를 특별하게 기록하는 공간.",
-    description:
-      "일상의 작은 순간을 모으는 기록 서비스의 포트폴리오 예시입니다. 간결한 정보 구조와 편안한 색감에 집중한 디자인 콘셉트입니다.",
-    tags: ["Product Design", "Web App"],
-    art: "ordinary",
-    year: "2026",
-  },
-  {
-    id: 3,
-    number: "03",
-    title: "Layers",
-    type: "DESIGN EXPLORATION",
-    summary: "아이디어가 쌓이고 연결되는 새로운 방식.",
-    description:
-      "생각의 연결을 시각적으로 표현하는 인터페이스 실험의 예시입니다. 카드, 레이어, 타이포그래피를 통해 새로운 탐색 방식을 제안합니다.",
-    tags: ["Interface", "Creative Coding"],
-    art: "layers",
-    year: "2026",
-  },
-];
-const newsItems = [
-  {
-    category: "AI & DEVELOPMENT",
-    title: "AI와 함께 코드를 쓴다는 것",
-    description: "개발 도구의 변화와 우리가 생각해 볼 질문들.",
-    source: "개발 도구 이야기",
-    color: "green",
-    body: "AI 개발 도구를 활용할 때에도 문제를 정의하고 결과를 검증하는 과정은 중요합니다. 생산성을 높이는 도구와 좋은 제품을 만드는 판단이 어떻게 연결되는지 살펴보는 샘플 콘텐츠입니다.",
-  },
-  {
-    category: "WEB PLATFORM",
-    title: "브라우저 안에서 펼쳐지는 3D의 가능성",
-    description: "WebGL부터 WebGPU까지, 웹 그래픽의 새로운 장면.",
-    source: "웹 그래픽 이야기",
-    color: "orange",
-    body: "웹 그래픽은 정보를 공간으로 표현하는 새로운 방식을 제공합니다. 이 사이트는 Three.js의 WebGL 렌더러로 도시를 표현합니다. 성능, 접근성, 모바일 조작을 함께 고려하는 것이 핵심입니다.",
-  },
-  {
-    category: "FRONTEND",
-    title: "프레임워크보다 오래 남는 기본기",
-    description: "변화가 빠른 프론트엔드에서 놓치지 말아야 할 것.",
-    source: "프론트엔드 이야기",
-    color: "yellow",
-    body: "브라우저의 동작 방식, 의미 있는 HTML, CSS 레이아웃, JavaScript의 실행 모델은 다양한 프레임워크를 이해하는 기반이 됩니다. 특정 기술의 순위를 소개하는 기사 대신 기본기에 대한 질문을 담은 예시입니다.",
-  },
-];
+const filteredPortfolios = computed(() => {
+  const query = portfolioSearch.value.trim().toLocaleLowerCase();
+  return latestPortfolios.value.filter((item) => item.visibility === "PUBLIC" &&
+    (!query || [item.title, item.summary].join(" ").toLocaleLowerCase().includes(query)));
+});
+const portfolioPageSize = 6;
+const portfolioPageCount = computed(() => Math.max(1, Math.ceil(filteredPortfolios.value.length / portfolioPageSize)));
+const visiblePortfolios = computed(() => {
+  const start = (portfolioPage.value - 1) * portfolioPageSize;
+  return filteredPortfolios.value.slice(start, start + portfolioPageSize);
+});
+watch(portfolioSearch, () => { portfolioPage.value = 1; });
+watch(portfolioPageCount, (count) => { portfolioPage.value = Math.min(portfolioPage.value, count); });
+const portfolio = computed(() => portfolios.value.find((item) => item.id === selectedPortfolio.value
+  && (item.visibility === "PUBLIC" || item.author.id === user.value?.id)));
+const canManagePortfolio = computed(() => !!user.value && portfolio.value?.author.id === user.value.id);
+const publishedPortfolio = computed(() => portfolio.value ? ({
+  title: portfolio.value.title,
+  category: "",
+  tags: [],
+  author: portfolio.value.author,
+  date: "",
+  visibility: portfolio.value.visibility,
+  coverImage: portfolio.value.coverImage,
+  content: portfolio.value.content,
+  imageLayouts: {},
+}) : undefined);
 const blogOwner = computed(() => {
   const slug = route.params.authorSlug;
   if (typeof slug !== "string") return null;
@@ -390,6 +394,7 @@ watch(
   () => [
     route.params.authorSlug,
     route.params.postSlug,
+    route.params.postId,
     posts.value,
     user.value?.id,
   ],
@@ -504,6 +509,7 @@ function openPost(post: BlogPost) {
     params: {
       authorSlug: authorSlug(post.author.name),
       postSlug: post.slug || postSlug(post.title),
+      postId: String(post.id),
     },
     state: { postId: post.id },
   });
@@ -550,19 +556,19 @@ function selectBlogTag(tag: string) {
 }
 const contentAction = computed(() => {
   if (section.value !== "blog" || !user.value) return undefined;
-  if (!isOwnBlog.value) return "blog";
+  if (!isOwnBlog.value) return undefined;
   if (!article.value) return "write";
-  return article.value.content !== undefined ? "edit" : undefined;
+  return article.value.author?.id === user.value.id && article.value.content !== undefined ? "edit" : undefined;
 });
-function handleContentAction(action: "write" | "edit" | "blog" | "delete") {
+function handleContentAction(action: "write" | "edit" | "delete") {
   if (action === "delete") {
     deleteError.value = "";
+    deleteConfirmationText.value = "";
     deleteConfirmationOpen.value = true;
     return;
   }
   if (action === "write") return startWriting();
   if (action === "edit") return continueEditing();
-  return selectBlogScope("mine");
 }
 async function deleteCurrentPost() {
   const post = article.value;
@@ -571,6 +577,7 @@ async function deleteCurrentPost() {
     deleteConfirmationOpen.value = false;
     return;
   }
+  if (deleteConfirmationText.value !== "삭제") return;
   deleteError.value = "";
   try {
     await removePost(post.id);
@@ -621,8 +628,6 @@ watch(() => route.fullPath, (path, previous) => {
   if (previous) saveCurrentScroll(previous);
   deleteConfirmationOpen.value = false;
   deleteError.value = "";
-  selectedProject.value = null;
-  newsSelection.value = null;
   if (!import.meta.env.SSR) restoreBlogScroll(readBlogScroll(path), path);
 }, { immediate: true });
 onBeforeRouteLeave((_to, from) => { saveCurrentScroll(from.fullPath); });
@@ -636,7 +641,27 @@ onMounted(() => {
   if (bootstrap) bootstrap.url = "";
   restoreBlogScroll(readBlogScroll(route.fullPath));
 });
-const project = computed(() => projects.find((p) => p.id === selectedProject.value));
+function writePortfolio(item?: (typeof portfolios.value)[number]) {
+  return router.push({ name: "portfolio-write", query: item ? { id: String(item.id) } : {} });
+}
+function managePortfolio(action: "write" | "edit" | "delete") {
+  const item = portfolio.value;
+  if (!canManagePortfolio.value || !item) return;
+  if (action === "edit") return writePortfolio(item);
+  if (action !== "delete") return;
+  deleteConfirmationText.value = "";
+  deleteError.value = "";
+  deleteConfirmationOpen.value = true;
+}
+function deleteCurrentPortfolio() {
+  const item = portfolio.value;
+  if (!item || !canManagePortfolio.value || deleteConfirmationText.value !== "삭제") return;
+  portfolios.value = portfolios.value.filter((portfolioItem) => portfolioItem.id !== item.id);
+  deleteConfirmationOpen.value = false;
+  const query = { ...route.query };
+  delete query.portfolioId;
+  void router.replace({ query });
+}
 </script>
 
 <template>
@@ -644,47 +669,60 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
     <SiteHeader :active="section" />
     <main ref="pageElement" class="content-window" :class="section" aria-labelledby="content-panel-title">
       <ContentActions
-        v-if="section !== 'blog' || article || blogNotFound"
+        v-if="section !== 'blog' || blogNotFound"
         :action="contentAction"
         :deletable="canDeleteArticle"
         @action="handleContentAction"
       />
-      <div
-        v-if="deleteConfirmationOpen && canDeleteArticle"
+      <dialog
+        v-if="deleteConfirmationOpen && (section === 'portfolio' ? canManagePortfolio : canDeleteArticle)"
+        ref="deleteDialog"
         class="post-delete-confirmation"
         role="alertdialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-labelledby="post-delete-title"
         aria-describedby="post-delete-description"
+        @cancel.prevent="deleteConfirmationOpen = false"
       >
         <div>
-          <h2 id="post-delete-title">게시글을 삭제할까요?</h2>
+          <h2 id="post-delete-title">{{ section === 'portfolio' ? '포트폴리오를 삭제할까요?' : '게시글을 삭제할까요?' }}</h2>
           <p id="post-delete-description">
-            삭제한 글은 복구할 수 없습니다.
+            삭제한 내용은 복구할 수 없습니다.
           </p>
           <p v-if="deleteError" class="post-delete-error" role="alert">
             {{ deleteError }}
           </p>
         </div>
+        <label class="post-delete-label" for="post-delete-input">
+          확인을 위해 <strong>삭제</strong>를 입력해 주세요.
+        </label>
+        <input
+          id="post-delete-input"
+          v-model="deleteConfirmationText"
+          class="post-delete-input"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="삭제"
+          autofocus
+        />
         <div class="post-delete-confirmation-actions">
           <button
-            autofocus
             class="post-delete-cancel"
             @click="deleteConfirmationOpen = false"
           >
             취소
           </button>
-          <button class="post-delete-submit" @click="deleteCurrentPost">
-            게시글 삭제
+          <button class="post-delete-submit" :disabled="deleteConfirmationText !== '삭제'" @click="section === 'portfolio' ? deleteCurrentPortfolio() : deleteCurrentPost()">
+            삭제
           </button>
         </div>
-      </div>
+      </dialog>
       <h2 id="content-panel-title" class="visually-hidden">
         {{
           section === "blog"
             ? blogTitle
             : section === "home"
-              ? `${displayName(homeProfile.owner)}의 집`
+              ? homeProfile.owner.id === user?.id ? "마이페이지" : `${displayName(homeProfile.owner)}의 집`
               : places[section].name
         }}
       </h2>
@@ -699,6 +737,11 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
         v-if="section === 'home' && (route.query.resident ? visitingResident : user)"
         :profile="homeProfile"
         :posts="homePosts"
+        :portfolio-items="homePortfolios"
+        v-model:tab="homeTab"
+        v-model:search="homeSearch"
+        v-model:page="homePage"
+        v-model:category="homeCategory"
         :own="homeProfile.owner.id === user?.id"
         :post-count="
           visitingResident?.postCount ?? ownResidence?.postCount ?? 0
@@ -709,7 +752,8 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
             ? visitingResident.activityPoints
             : (ownResidence?.activityPoints ?? null)
         "
-        @blog="openAuthorBlog(homeProfile.owner)"
+        @portfolio="item => router.push({ name: 'portfolio', query: { portfolioId: String(item.id) } })"
+        @write="kind => kind === 'blog' ? startWriting() : writePortfolio()"
         @post="openPost"
         @prefetch="prefetchArticle"
       />
@@ -749,29 +793,14 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
             @select-tag="selectBlogTag"
             @select-author="openAuthorBlog"
           >
-            <div class="article-illustration">
-              <DefaultPostCover />
-            </div>
-            <p class="article-lead">{{ article.description }}</p>
-            <h3>작은 아이디어에서 시작하기</h3>
-            <p>
-              좋은 경험은 거창한 기능보다 작은 질문에서 시작됩니다. 무엇을
-              전달하고 싶은지, 어떤 순간이 기억에 남을지 생각하며 하나씩
-              만들어 봅니다.
-            </p>
-            <blockquote>
-              코드를 쓰는 일은, 누군가가 머물고 싶은 공간을 만드는 일.
-            </blockquote>
-            <h3>직접 만들어 보며 배우기</h3>
-            <p>
-              이 동네도 그런 실험의 하나입니다. 건물은 콘텐츠가 되고, 길은
-              탐색이 됩니다. 기술과 디자인 사이에서 균형을 찾는 과정에
-              앞으로의 개발 이야기를 차곡차곡 쌓아갈 예정입니다.
-            </p>
-            <div class="demo-note">
-              메인 페이지 동작을 보여주기 위한 샘플 글입니다. 실제 블로그
-              콘텐츠로 교체할 수 있어요.
-            </div>
+            <template #actions>
+              <ContentActions
+                v-if="contentAction === 'edit'"
+                action="edit"
+                :deletable="canDeleteArticle"
+                @action="handleContentAction"
+              />
+            </template>
           </PostArticle>
           <div v-if="article.visibility !== 'PRIVATE'" class="article-like-actions">
             <PostLikeButton
@@ -789,24 +818,8 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
           class="window-body blog-body"
           @scroll.passive="rememberBlogScroll"
         >
-          <header class="window-heading blog-list-heading">
+          <header class="blog-list-heading">
             <span class="section-kicker">01 / BLOG HOUSE</span>
-            <div v-if="isOwnBlog || contentAction === 'blog'" class="blog-list-heading-actions">
-              <button
-                v-if="isOwnBlog"
-                class="blog-home-button"
-                aria-label="블로그 홈으로 이동"
-                @click="selectBlogScope('all')"
-              >
-                <Icon name="arrow-left" :size="15" />
-                <span>블로그 홈</span>
-              </button>
-              <ContentActions
-                v-else
-                action="blog"
-                @action="handleContentAction"
-              />
-            </div>
           </header>
           <BlogPostList
             :posts="scopedPosts"
@@ -835,7 +848,7 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
           >
             <template #actions>
               <ContentActions
-                :action="contentAction === 'blog' ? undefined : contentAction"
+                :action="contentAction"
                 @action="handleContentAction"
               />
             </template>
@@ -843,151 +856,44 @@ const project = computed(() => projects.find((p) => p.id === selectedProject.val
         </div>
       </template>
       <template v-else-if="section === 'portfolio'">
-        <div v-if="project" class="article-body">
-          <button class="text-back" @click="selectedProject = null">
-            ← 프로젝트 목록으로</button
-          ><span class="section-kicker"
-            >{{ project.type }} / {{ project.year }}</span
-          >
-          <h2>{{ project.title }}<span>.</span></h2>
-          <p class="article-lead">{{ project.summary }}</p>
-          <div class="project-art detail-art" :class="project.art">
-            <span v-if="project.art === 'city'" class="art-city"
-              ><i></i><i></i><i></i><i></i></span
-            ><span v-else class="project-art-word"
-              >{{ project.title }}<span>®</span></span
-            >
-          </div>
-          <h3>About this project</h3>
-          <p>{{ project.description }}</p>
-          <div class="project-tags">
-            <span v-for="tag in project.tags" :key="tag">{{ tag }}</span>
-          </div>
-          <div class="demo-note">
-            {{
-              project.id === 1
-                ? "현재 보고 있는 3D 메인 페이지입니다."
-                : "포트폴리오 레이아웃을 보여주기 위한 콘셉트 프로젝트입니다."
-            }}
-          </div>
+        <div v-if="portfolio" class="window-body portfolio-view">
+              <PortfolioDocument
+                v-if="publishedPortfolio"
+                :key="portfolio.id"
+                :post="publishedPortfolio"
+                :title-runs="portfolio.titleRuns"
+                :title-align="portfolio.titleAlign"
+                :blocks="portfolio.blocks"
+              >
+                <template #actions>
+                  <ContentActions v-if="canManagePortfolio" action="edit" subject="포트폴리오" deletable @action="managePortfolio" />
+                  <PortfolioPdfButton v-if="canManagePortfolio" icon-only :post="publishedPortfolio" :title-runs="portfolio.titleRuns" :title-align="portfolio.titleAlign" :blocks="portfolio.blocks" />
+                </template>
+              </PortfolioDocument>
         </div>
-        <div v-else class="window-body">
-          <div class="window-heading">
-            <div>
-              <span class="section-kicker">02 / THE GALLERY</span>
-              <h2>아이디어가 현실이 되는 순간<span>.</span></h2>
-              <p>취향을 담아, 쓰임을 생각하며 만든 것들.</p>
-            </div>
-            <span class="heading-icon portfolio-icon"
-              ><Icon name="case" :size="32"
-            /></span>
-          </div>
-          <div class="project-list">
-            <button
-              v-for="item in projects"
-              :key="item.id"
-              class="project-card"
-              @click="selectedProject = item.id"
-            >
-              <div class="project-art" :class="item.art">
-                <span v-if="item.art === 'city'" class="art-city"
-                  ><i></i><i></i><i></i><i></i></span
-                ><span v-else class="project-art-word"
-                  >{{ item.title }}<span>®</span></span
-                ><small>{{ item.type }}</small>
-              </div>
-              <div class="project-information">
-                <span class="project-number"
-                  >{{ item.number }} / {{ item.year }}</span
-                >
-                <h3>{{ item.title }}<Icon name="arrow" :size="24" /></h3>
-                <p>{{ item.summary }}</p>
-                <div class="project-tags">
-                  <span v-for="tag in item.tags" :key="tag">{{ tag }}</span>
-                </div>
-              </div>
-            </button>
-          </div>
-          <div class="window-footer">
-            <span class="demo-label">SELECTED WORK & CONCEPTS</span
-            ><span>작은 실험이 다음 프로젝트의 시작이 됩니다.</span>
-          </div>
-        </div>
-      </template>
-      <template v-else-if="section === 'news'">
-        <div v-if="newsSelection !== null" class="article-body">
-          <button class="text-back" @click="newsSelection = null">
-            ← 이슈 목록으로</button
-          ><span class="section-kicker"
-            >{{ newsItems[newsSelection]!.category }} / SAMPLE ISSUE</span
-          >
-          <h2>{{ newsItems[newsSelection]!.title }}</h2>
-          <p class="article-lead">
-            {{ newsItems[newsSelection]!.description }}
-          </p>
-          <div
-            class="news-detail-art"
-            :class="newsItems[newsSelection]!.color"
-          >
-            <Icon
-              :name="
-                newsSelection === 0
-                  ? 'spark'
-                  : newsSelection === 1
-                    ? 'compass'
-                    : 'book'
-              "
-              :size="96"
+        <div v-else class="window-body portfolio-view">
+          <header class="blog-list-heading portfolio-list-heading">
+            <span class="section-kicker">01 / PORTFOLIO</span>
+          </header>
+
+          <div class="portfolio-toolbar">
+            <BlogSearch
+              :model-value="portfolioSearch"
+              placeholder="제목, 소개 검색"
+              label="포트폴리오 검색"
+              @update:model-value="portfolioSearch = $event"
             />
           </div>
-          <p>{{ newsItems[newsSelection]!.body }}</p>
-          <div class="demo-note">
-            IT 이슈 창의 동작을 위한 샘플 콘텐츠입니다. 실시간 뉴스 피드와는
-            연결되어 있지 않습니다.
-          </div>
-        </div>
-        <div v-else class="window-body">
-          <div class="window-heading">
-            <div>
-              <span class="section-kicker">03 / DAILY BYTE</span>
-              <h2>세상은 지금, 업데이트 중<span>.</span></h2>
-              <p>빠르게 변하는 기술 속에서, 눈여겨볼 이야기.</p>
-            </div>
-            <span class="heading-icon news-icon"
-              ><Icon name="news" :size="32"
-            /></span>
-          </div>
-          <div class="news-feature">
-            <span class="news-feature-label">THE CURIOSITY EDIT</span>
-            <h3>새로운 기술보다,<br /><em>새로운 질문.</em></h3>
-            <p>다음에 만들고 싶은 것은 무엇인가요?</p>
-            <span class="news-feature-symbol">✳</span>
-          </div>
-          <div class="news-list">
-            <button
-              v-for="(item, index) in newsItems"
-              :key="item.title"
-              class="news-card"
-              @click="newsSelection = index"
-            >
-              <span class="news-number">0{{ index + 1 }}</span>
-              <div>
-                <span class="post-category">{{ item.category }}</span>
-                <h3>{{ item.title }}</h3>
-                <p>{{ item.description }}</p>
-                <small>{{ item.source }}<span>·</span>샘플 이슈</small>
-              </div>
-              <span class="news-arrow"
-                ><Icon name="arrow" :size="20"
-              /></span>
-            </button>
-          </div>
-          <div class="window-footer">
-            <span class="demo-label">DEMO CONTENT</span
-            ><span>실시간 뉴스 연동 전, 콘텐츠 구성 예시입니다.</span>
-          </div>
+
+          <PortfolioList v-if="visiblePortfolios.length" :items="visiblePortfolios" @select="openPortfolio" />
+          <BlogPagination v-if="filteredPortfolios.length" label="포트폴리오 페이지" :page="portfolioPage" :page-count="portfolioPageCount" @select="portfolioPage = $event" />
+          <div v-if="!filteredPortfolios.length" class="content-empty"><Icon name="case" :size="25" /><p>{{ portfolioSearch.trim() ? '검색 결과가 없어요. 다른 검색어로 찾아보세요.' : '아직 공개된 포트폴리오가 없어요.' }}</p></div>
         </div>
       </template>
+      <div v-else-if="section === 'news'" class="window-body">
+        <header class="blog-list-heading"><span class="section-kicker">03 / IT ISSUE</span></header>
+        <div class="content-empty" role="status"><Icon name="news" :size="25" /><p>서비스 준비 중입니다.</p></div>
+      </div>
     </main>
   </div>
 </template>

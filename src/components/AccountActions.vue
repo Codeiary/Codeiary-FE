@@ -91,10 +91,10 @@ async function logout() {
   gap: 10px;
   min-height: 38px;
   padding: 0 15px;
-  border: 1px solid var(--theme-border);
+  border: 1px solid transparent;
   border-radius: 6px;
   color: var(--theme-text);
-  background: var(--theme-surface);
+  background: var(--theme-raised);
   font-size: var(--account-font-size, var(--font-size-min));
   font-weight: 550;
   transition:
@@ -103,10 +103,6 @@ async function logout() {
 }
 .account-button:hover {
   border-color: var(--theme-accent);
-  background: var(--theme-raised);
-}
-.account-login {
-  border-color: transparent;
   background: var(--theme-raised);
 }
 .account-button:disabled {

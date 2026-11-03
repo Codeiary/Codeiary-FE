@@ -40,7 +40,6 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
   save: [];
   images: [files: File[]];
-  scroll: [];
 }>();
 const host = ref<HTMLElement>();
 let view: EditorView | undefined;
@@ -220,10 +219,6 @@ onMounted(() => {
             emit("update:modelValue", update.state.doc.toString());
         }),
         EditorView.domEventHandlers({
-          scroll(event, editor) {
-            if (event.target === editor.scrollDOM) emit("scroll");
-            return false;
-          },
           paste(event) {
             const files = Array.from(event.clipboardData?.files ?? []).filter(
               (file) => file.type.startsWith("image/"),

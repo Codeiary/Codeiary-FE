@@ -6,7 +6,7 @@ import CoverImage from "@/components/blog/CoverImage.vue";
 import DefaultPostCover from "@/components/blog/DefaultPostCover.vue";
 import PostLikeButton from "@/components/blog/PostLikeButton.vue";
 import type { BlogAuthor, BlogPost } from "@/utils/blog/posts";
-import { authorSlug, postSlug } from "@/utils/blog/slug";
+import { postPath } from "@/utils/blog/slug";
 
 const props = defineProps<{ post: BlogPost; compact?: boolean }>();
 const emit = defineEmits<{
@@ -41,7 +41,7 @@ function openPost(event: MouseEvent, id: number) {
   <article class="post-card" :class="{ 'post-card-compact': compact }">
     <a
       class="post-open"
-      :href="post.author ? `/blog/${encodeURIComponent(authorSlug(post.author.name))}/${encodeURIComponent(post.slug || postSlug(post.title))}` : undefined"
+      :href="post.author ? postPath(post.author.name, post.title, post.id, post.slug) : undefined"
       :aria-label="`${post.title} 글 보기`"
       @pointerenter="hoverPost"
       @pointerleave="cancelPrefetch"

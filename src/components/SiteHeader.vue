@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, useId, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import BrandLogo from "@/components/BrandLogo.vue";
 import AccountActions from "@/components/AccountActions.vue";
 import Icon from "@/components/Icon.vue";
@@ -16,15 +16,23 @@ const emit = defineEmits<{
 }>();
 const route = useRoute();
 const router = useRouter();
-const items = computed<{ id: Destination; name: string }[]>(() => [
+const items: { id: Destination; name: string }[] = [
   { id: "blog", name: "블로그" },
   { id: "portfolio", name: "포트폴리오" },
   { id: "news", name: "최근 IT 이슈" },
-  ...(auth.user.value ? [{ id: "home" as const, name: "내 집" }] : []),
-]);
+];
 const navigationId = `site-navigation-${useId()}`;
 const menuOpen = ref(false);
 const menuButton = ref<HTMLButtonElement>();
+const header = ref<HTMLElement>();
+const navigation = ref<HTMLElement>();
+async function toggleMenu() {
+  menuOpen.value = !menuOpen.value;
+  if (menuOpen.value) {
+    await nextTick();
+    navigation.value?.querySelector("button")?.focus();
+  }
+}
 function closeMenu() {
   menuOpen.value = false;
   menuButton.value?.focus();
@@ -44,6 +52,18 @@ function handleEscape(event: KeyboardEvent) {
   event.stopPropagation();
   closeMenu();
 }
+function handleOutside(event: PointerEvent) {
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  if (!header.value?.contains(target)) menuOpen.value = false;
+}
+function handleFocusOut(event: FocusEvent) {
+  const target = event.relatedTarget;
+  if (!(target instanceof Node)) return;
+  if (!header.value?.contains(target)) menuOpen.value = false;
+}
+onMounted(() => document.addEventListener("pointerdown", handleOutside));
+onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutside));
 watch(
   () => route.fullPath,
   () => { menuOpen.value = false; },
@@ -52,37 +72,58 @@ watch(
 
 <template>
   <header
+    ref="header"
     class="site-header"
-    :class="{ 'site-header-content': Boolean(props.active) }"
     @keydown.esc="handleEscape"
+    @focusout="handleFocusOut"
   >
     <button class="brand" aria-label="Codeiary 홈으로" @click="goHome">
       <BrandLogo />
     </button>
-    <nav :id="navigationId" aria-label="메인 메뉴" :class="{ 'is-open': menuOpen }">
+    <nav class="site-primary-navigation" aria-label="메인 메뉴">
       <button
         v-for="item in items"
         :key="item.id"
-        :class="{ active: active === item.id }"
-        :aria-current="active === item.id ? 'page' : undefined"
+        :class="{ active: props.active === item.id }"
+        :aria-current="props.active === item.id ? 'page' : undefined"
+        @click="navigate(item.id)"
+      >{{ item.name }}</button>
+    </nav>
+    <nav ref="navigation" :id="navigationId" class="site-menu-panel" aria-label="전체 메뉴" :class="{ 'is-open': menuOpen }">
+      <button
+        v-for="item in items"
+        :key="item.id"
+        :class="{ active: props.active === item.id }"
+        :aria-current="props.active === item.id ? 'page' : undefined"
         @click="navigate(item.id)"
       >
-        {{ item.name }}<span v-if="item.id === 'news'" class="nav-new"></span>
+        {{ item.name }}
       </button>
     </nav>
     <div class="site-header-actions">
-      <div class="header-right"><AccountActions compact /></div>
+      <div class="header-right">
+        <RouterLink v-if="auth.user.value" :to="{ name: 'user-home' }" class="mypage-link" aria-label="마이페이지" title="마이페이지">
+          <Icon name="home" :size="22" />
+        </RouterLink>
+        <AccountActions compact />
+      </div>
       <button
         ref="menuButton"
         class="site-menu-toggle"
         :aria-label="menuOpen ? '메뉴 닫기' : '메뉴 열기'"
         :aria-expanded="menuOpen"
         :aria-controls="navigationId"
-        @click="menuOpen = !menuOpen"
+        @click="toggleMenu"
       >
         <Icon :name="menuOpen ? 'close' : 'menu'" :size="22" />
       </button>
     </div>
   </header>
-  <button v-if="menuOpen" class="site-menu-backdrop" aria-label="메뉴 닫기" tabindex="-1" @click="closeMenu"></button>
 </template>
+
+<style scoped>
+.header-right { gap: 8px; }
+.mypage-link { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 8px; color: var(--theme-text); text-decoration: none; }
+.mypage-link:hover { background: var(--theme-raised); }
+.mypage-link:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 2px; }
+</style>

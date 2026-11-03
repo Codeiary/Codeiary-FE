@@ -57,6 +57,8 @@ const visiblePosts = computed(() => {
   const start = (currentPage.value - 1) * pageSize;
   return filteredPosts.value.slice(start, start + pageSize);
 });
+const publicEmpty = computed(() => !props.own && !props.search.trim() && !props.tag && !props.category
+  && (props.personal || props.page === 1));
 </script>
 
 <template>
@@ -122,8 +124,9 @@ const visiblePosts = computed(() => {
         @select="$emit('update:page', $event)"
       />
       <p v-if="loading && !filteredPosts.length" role="status">게시글을 불러오고 있어요.</p>
-      <div v-else-if="!filteredPosts.length && !error" class="empty-state blog-empty-state">
-        <span class="blog-empty-icon"><Icon name="book" :size="32" /></span>
+      <div v-else-if="!filteredPosts.length && !error" :class="publicEmpty ? 'content-empty' : 'empty-state blog-empty-state'">
+        <Icon v-if="publicEmpty" name="book" :size="25" />
+        <span v-else class="blog-empty-icon"><Icon name="book" :size="32" /></span>
         <template v-if="search.trim() || tag || category">
           <h3>찾는 이야기가 아직 없어요</h3>
           <p>
@@ -157,7 +160,7 @@ const visiblePosts = computed(() => {
           </button>
         </template>
         <template v-else>
-          <h3>아직 공개된 글이 없어요</h3>
+          <p>아직 공개된 글이 없어요.</p>
         </template>
       </div>
     </div>
@@ -180,17 +183,6 @@ const visiblePosts = computed(() => {
 .blog-collection-personal .blog-filter {
   margin-bottom: 4px;
 }
-.blog-collection-personal :deep(.search-input) {
-  width: 100%;
-  min-height: 44px;
-  background: var(--theme-raised);
-  border-color: transparent;
-  border-radius: 12px;
-}
-.blog-collection-personal :deep(.search-input input) {
-  padding: 12px 0;
-  font-size: var(--font-size-min);
-}
 .blog-collection-personal :deep([role="search"]) {
   flex: 1;
 }
@@ -211,9 +203,6 @@ const visiblePosts = computed(() => {
   .blog-collection-personal {
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;
-  }
-  .blog-collection-personal :deep(.search-input) {
-    width: 100%;
   }
 }
 @media (max-width: 600px) {

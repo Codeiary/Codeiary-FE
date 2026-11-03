@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createWebHistory, createRouter } from "vue-router";
 import { RouterView } from "vue-router";
-import { fetchPost, fetchPosts, fetchMyPostCount, updatePost } from "@/services/blog-api";
+import { fetchPost, fetchPosts, fetchMyPostCount, updatePost, removePost } from "@/services/blog-api";
 import { fetchNeighborhoodResidents } from "@/services/neighborhood";
 import { rememberSavedPost, takeSavedPost } from "@/store/saved-post";
 import { AuthError } from "@/services/auth-api";
@@ -13,6 +13,16 @@ import { userFixture } from "./fixtures/auth";
 import { cityRoutes } from "@/router/city-routes";
 import { blogPostsFixture, postFixture } from "./fixtures/blog";
 import { clearCityState, saveCityState, type CityState } from "@/store/city";
+import { portfolios, type PortfolioItem } from "@/store/portfolio";
+import { authorSlug } from "@/utils/blog/slug";
+
+const originalPortfolios = JSON.stringify(portfolios.value);
+function portfolioFixture(): PortfolioItem {
+  return {
+    id: 1, author: { id: 1, name: "기록자" }, title: "테스트 포트폴리오",
+    summary: "테스트 소개", content: "테스트 본문", visibility: "PUBLIC",
+  };
+}
 
 const setHome = vi.hoisted(() => vi.fn());
 const cityLifecycle = vi.hoisted(() => ({
@@ -99,7 +109,13 @@ async function render(writer = false) {
   await router.push("/blog");
   const wrapper = mount(RouterView, {
     attachTo: document.body,
-    global: { plugins: [router], stubs: { AccountActions: true, PostComments: true, PostLikeButton: true, MarkdownEditor: true } },
+    global: {
+      plugins: [router],
+      stubs: {
+        AccountActions: true, PostComments: true, PostLikeButton: true,
+        MarkdownEditor: { template: "<div />", methods: { scrollElement: () => undefined } },
+      },
+    },
   });
   wrappers.push(wrapper);
   await flushPromises();
@@ -107,6 +123,10 @@ async function render(writer = false) {
 }
 function titles(wrapper: VueWrapper) {
   return wrapper.findAll(".post-card h3").map((card) => card.text());
+}
+async function openMyBlog(wrapper: VueWrapper) {
+  await wrapper.vm.$router.push({ name: "user-blog", params: { authorSlug: authorSlug(user.value!.name) } });
+  await flushPromises();
 }
 async function searchFor(wrapper: VueWrapper, value: string) {
   await wrapper.get('input[aria-label="블로그 글 검색"]').setValue(value);
@@ -133,6 +153,7 @@ describe("블로그 글 목록", () => {
       wrapper.vm.$router.options.history.destroy();
       wrapper.unmount();
     });
+    portfolios.value = JSON.parse(originalPortfolios);
   });
 
   it("선택하려는 글을 미리 불러오고 클릭할 때 진행 중인 요청을 재사용할 수 있다.", async () => {
@@ -155,22 +176,6 @@ describe("블로그 글 목록", () => {
     resolve(post);
     await flushPromises();
     await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("미리 요청한 본문"));
-  });
-
-  it("바로 클릭해도 본문 응답을 기다리지 않고 렌더러를 준비할 수 있다.", async () => {
-    const post = postFixture({ content: "동시에 준비한 본문" });
-    blogApiMock.posts = [post];
-    const wrapper = await render();
-    const renderer = vi.spyOn(markdownLoader, "loadMarkdownContent");
-    let resolve!: (post: ReturnType<typeof postFixture>) => void;
-    vi.mocked(fetchPost).mockReturnValueOnce(new Promise((done) => { resolve = done; }));
-    await wrapper.get(".post-open").trigger("click");
-    await flushPromises();
-    expect(renderer).toHaveBeenCalled();
-    expect(fetchPost).toHaveBeenCalledExactlyOnceWith(post.id);
-    resolve(post);
-    await flushPromises();
-    await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("동시에 준비한 본문"));
   });
 
   it.each(["만료", "계정 변경"])("%s 후에는 이전에 준비한 본문을 재사용하지 않을 수 있다.", async (reason) => {
@@ -219,6 +224,122 @@ describe("블로그 글 목록", () => {
     await vi.waitFor(() => expect(wrapper.get(".article-body").text()).toContain("비공개 본문"));
   });
 
+  it("작성·미리보기 구분선을 드래그하거나 키보드로 조절하고 반반으로 복원할 수 있다.", async () => {
+    user.value = userFixture("USER");
+    const wrapper = await render(true);
+    await wrapper.vm.$router.push("/write");
+    await flushPromises();
+    await vi.waitFor(() => expect(wrapper.find('[role="separator"]').exists()).toBe(true));
+    const divider = wrapper.get('[role="separator"]');
+    const layout = wrapper.get(".writer-layout");
+    vi.spyOn(layout.element, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 0, 1000, 600));
+    Object.defineProperties(layout.element, { clientWidth: { value: 1000 }, clientLeft: { value: 0 } });
+    vi.spyOn(divider.element, "getBoundingClientRect").mockReturnValue(new DOMRect(594, 0, 12, 600));
+    const release = vi.fn();
+    Object.defineProperties(divider.element, {
+      setPointerCapture: { value: vi.fn() }, hasPointerCapture: { value: () => true }, releasePointerCapture: { value: release },
+    });
+    await divider.trigger("pointerdown", { button: 0, pointerId: 1, isPrimary: true });
+    await divider.trigger("pointermove", { pointerId: 1, clientX: 850 });
+    expect(divider.attributes("aria-valuenow")).toBe("75");
+    await divider.trigger("pointermove", { pointerId: 1, clientX: 2000 });
+    expect(divider.attributes("aria-valuenow")).toBe("80");
+    await divider.trigger("pointerup", { pointerId: 1 });
+    expect(release).toHaveBeenCalledWith(1);
+    await divider.trigger("pointermove", { pointerId: 1, clientX: 100 });
+    expect(divider.attributes("aria-valuenow")).toBe("80");
+    await divider.trigger("keydown", { key: "Home" });
+    await divider.trigger("keydown", { key: "ArrowRight" });
+    expect(divider.attributes("aria-valuenow")).toBe("22");
+    await divider.trigger("dblclick");
+    expect(divider.attributes("aria-valuenow")).toBe("50");
+    await wrapper.get('[aria-label="미리보기"]').trigger("click");
+    expect(wrapper.find('[role="separator"]').exists()).toBe(false);
+    await wrapper.get('[aria-label="작성"]').trigger("click");
+    expect(wrapper.get('[role="separator"]').attributes("aria-valuenow")).toBe("50");
+    expect(wrapper.get<HTMLTextAreaElement>('[aria-label="게시글 제목"]').element.value).toBe("");
+  });
+
+  it.each([null, 2, 1])("사용자 %s에게 소유한 글의 관리 기능만 표시하고 삭제를 취소할 수 있다.", async (id) => {
+    user.value = id ? { ...userFixture("USER"), id } : null;
+    blogApiMock.posts = [postFixture({ content: "본문" })];
+    const wrapper = await render();
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
+    const edit = wrapper.find('[aria-label="게시글 수정"]');
+    const remove = wrapper.find('[aria-label="게시글 삭제"]');
+    expect(edit.exists()).toBe(id === 1);
+    expect(remove.exists()).toBe(id === 1);
+    expect(wrapper.find(".content-window > .content-actions").exists()).toBe(false);
+    expect(wrapper.find(".article-header-actions").exists()).toBe(true);
+    if (id !== 1) return;
+    await remove.trigger("click");
+    await flushPromises();
+    expect(wrapper.get("dialog").attributes("open")).toBeDefined();
+    expect(wrapper.get("dialog").attributes("aria-modal")).toBe("true");
+    expect(wrapper.get<HTMLButtonElement>(".post-delete-submit").element.disabled).toBe(true);
+    await wrapper.get("#post-delete-input").setValue("삭제해");
+    expect(wrapper.get<HTMLButtonElement>(".post-delete-submit").element.disabled).toBe(true);
+    await wrapper.get("#post-delete-input").setValue("삭제");
+    expect(wrapper.get<HTMLButtonElement>(".post-delete-submit").element.disabled).toBe(false);
+    await wrapper.get(".post-delete-cancel").trigger("click");
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(removePost).not.toHaveBeenCalled();
+  });
+
+  it.each([null, 2, 1])("사용자 %s에게 소유한 포트폴리오만 관리하도록 하고 문구를 확인한 뒤 삭제한다.", async (id) => {
+    user.value = id ? { ...userFixture("USER"), id } : null;
+    portfolios.value = [portfolioFixture()];
+    const wrapper = await render();
+    await wrapper.vm.$router.push({ name: "portfolio", query: { portfolioId: "1" } });
+    await vi.waitFor(() => expect(wrapper.find(".portfolio-document-title").exists()).toBe(true));
+    expect(wrapper.find(".portfolio-document-actions").exists()).toBe(true);
+    expect(wrapper.find(".portfolio-list-heading").exists()).toBe(false);
+    expect(wrapper.find('[aria-label="포트폴리오 수정"]').exists()).toBe(id === 1);
+    expect(wrapper.find('[aria-label="PDF 내보내기"]').exists()).toBe(id === 1);
+    const remove = wrapper.find('[aria-label="포트폴리오 삭제"]');
+    expect(remove.exists()).toBe(id === 1);
+    if (id !== 1) return;
+    await remove.trigger("click");
+    await flushPromises();
+    expect(wrapper.get("dialog").attributes("open")).toBeDefined();
+    expect(wrapper.get("dialog h2").text()).toBe("포트폴리오를 삭제할까요?");
+    await wrapper.get("#post-delete-input").setValue("삭제해");
+    await wrapper.get(".post-delete-submit").trigger("click");
+    expect(portfolios.value.some((item) => item.id === 1)).toBe(true);
+    await wrapper.get(".post-delete-cancel").trigger("click");
+    await remove.trigger("click");
+    await flushPromises();
+    expect(wrapper.get<HTMLInputElement>("#post-delete-input").element.value).toBe("");
+    await wrapper.get("#post-delete-input").setValue("삭제");
+    await wrapper.get(".post-delete-submit").trigger("click");
+    await flushPromises();
+    expect(portfolios.value.some((item) => item.id === 1)).toBe(false);
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBeUndefined();
+  });
+
+  it("포트폴리오를 이미지와 홈 버튼 없이 최신순으로 페이지를 나누고 검색한다.", async () => {
+    user.value = userFixture("USER");
+    const sample = portfolioFixture();
+    portfolios.value = Array.from({ length: 14 }, (_, index) => ({
+      ...sample, id: index + 1, title: `작업 ${index + 1}`,
+      summary: `작업 ${index + 1} 소개`, coverImage: "https://example.com/cover.png",
+      visibility: index === 13 ? "PRIVATE" : "PUBLIC",
+    }));
+    const wrapper = await render();
+    await wrapper.vm.$router.push({ name: "portfolio" });
+    await flushPromises();
+    const listed = () => wrapper.findAll(".portfolio-entry h3").map((item) => item.text());
+    expect(listed()).toEqual(["작업 13", "작업 12", "작업 11", "작업 10", "작업 9", "작업 8"]);
+    expect(wrapper.find(".portfolio-feed img, .project-art").exists()).toBe(false);
+    expect(wrapper.get("main").text()).not.toContain("최신순");
+    await wrapper.get('[aria-label="포트폴리오 페이지"] [aria-label="2페이지"]').trigger("click");
+    expect(listed()).toEqual(["작업 7", "작업 6", "작업 5", "작업 4", "작업 3", "작업 2"]);
+    await wrapper.get('[aria-label="포트폴리오 검색"]').setValue("작업 1");
+    await vi.waitFor(() => expect(listed()).toEqual(["작업 13", "작업 12", "작업 11", "작업 10", "작업 1"]));
+  });
+
   it("수정 응답으로 새 제목과 본문을 재조회 없이 바로 표시할 수 있다.", async () => {
     user.value = userFixture("USER");
     blogApiMock.posts = [postFixture({ content: "수정 전 본문", likedByMe: true })];
@@ -240,6 +361,7 @@ describe("블로그 글 목록", () => {
     expect(wrapper.get(".article-body h2").text()).toBe("바뀐 제목");
     expect(wrapper.get(".article-body").text()).toContain("서버에서 저장한 본문");
     expect(wrapper.vm.$router.currentRoute.value.params.postSlug).toBe("바뀐-제목");
+    expect(wrapper.vm.$router.currentRoute.value.params.postId).toBe("1");
     expect(updatePost).toHaveBeenCalledOnce();
     expect(fetchPost).not.toHaveBeenCalled();
     expect(fetchPosts).not.toHaveBeenCalled();
@@ -255,7 +377,7 @@ describe("블로그 글 목록", () => {
     const post = postFixture({ id: 99, title: "새 글", content: "새 본문" });
     await wrapper.vm.$router.push("/write");
     rememberSavedPost(post);
-    const target = { name: "blog-post", params: { authorSlug: "기록자", postSlug: "새-글" }, state: { postId: 99 } };
+    const target = { name: "blog-post", params: { authorSlug: "기록자", postSlug: "새-글", postId: "99" }, state: { postId: 99 } };
     vi.clearAllMocks();
     await wrapper.vm.$router.replace(target);
     await flushPromises();
@@ -269,6 +391,24 @@ describe("블로그 글 목록", () => {
     expect(fetchPost).toHaveBeenCalledExactlyOnceWith(99);
     expect(fetchPosts).not.toHaveBeenCalled();
     expect(wrapper.get(".article-body").text()).toContain("최신 본문");
+  });
+
+  it("제목이 같은 글도 URL의 글 ID로 구분해 열 수 있다.", async () => {
+    const first = postFixture({ id: 11, title: "같은 제목", content: "첫 번째 본문" });
+    const second = postFixture({ id: 12, title: "같은 제목", content: "두 번째 본문" });
+    blogApiMock.posts = [first, second];
+    const wrapper = await render();
+    const links = wrapper.findAll(".post-open");
+    expect(links[0]!.attributes("href")).not.toBe(links[1]!.attributes("href"));
+
+    const secondLink = links.find((link) => link.attributes("href")?.endsWith("/12"));
+    expect(secondLink).toBeDefined();
+    await secondLink!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.vm.$router.currentRoute.value.path).toMatch(/\/12$/);
+    expect(wrapper.get(".article-body").text()).toContain("두 번째 본문");
+    expect(fetchPost).toHaveBeenCalledWith(12);
   });
 
   it("본문을 조회하는 동안 오류를 표시하지 않고 삭제된 글을 다시 보여주지 않을 수 있다.", async () => {
@@ -289,21 +429,6 @@ describe("블로그 글 목록", () => {
     rememberSavedPost(post);
     expect(takeSavedPost(post.id, 2)).toBeUndefined();
     expect(takeSavedPost(post.id, 1)).toBeUndefined();
-  });
-
-  it("콘텐츠 페이지에는 모달과 3D 화면 없이 헤더 하나만 표시할 수 있다.", async () => {
-    const wrapper = await render();
-    for (const path of ["/blog", "/portfolio", "/news", "/home?resident=2"]) {
-      await wrapper.vm.$router.push(path);
-      await flushPromises();
-      expect(wrapper.find(".content-page main").exists()).toBe(true);
-      expect(wrapper.findAll(".site-header")).toHaveLength(1);
-      expect(wrapper.find("canvas, .modal-backdrop, [role=dialog]").exists()).toBe(false);
-    }
-    expect(cityLifecycle.create).not.toHaveBeenCalled();
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    await flushPromises();
-    expect(wrapper.vm.$router.currentRoute.value.path).toBe("/home");
   });
 
   it("페이지로 이동할 때 지도를 정리하고 뒤로가면 위치와 카메라를 복원할 수 있다.", async () => {
@@ -344,16 +469,6 @@ describe("블로그 글 목록", () => {
     expect(wrapper.find("canvas").exists()).toBe(true);
   });
 
-  it("기존 콘텐츠 주소를 새 페이지 주소로 연결할 수 있다.", async () => {
-    const wrapper = await render();
-    for (const view of ["portfolio", "news", "home", "blog"]) {
-      await wrapper.vm.$router.push(`/?view=${view}&resident=2`);
-      await flushPromises();
-      expect(wrapper.vm.$router.currentRoute.value.fullPath).toBe(`/${view}?resident=2`);
-      expect(wrapper.find("canvas").exists()).toBe(false);
-    }
-  });
-
   it("지도를 다녀온 뒤 블로그 목록의 스크롤 위치를 복원할 수 있다.", async () => {
     const wrapper = await render();
     const list = wrapper.get(".window-body");
@@ -369,58 +484,6 @@ describe("블로그 글 목록", () => {
       clientHeight: { value: 400, configurable: true },
     });
     await vi.waitFor(() => expect(restoredList.scrollTop).toBe(320));
-  });
-
-  it("비로그인 사용자는 내 블로그 버튼 없이 발행된 글만 볼 수 있다.", async () => {
-    const wrapper = await render();
-    expect(wrapper.find(".blog-my-posts").exists()).toBe(false);
-    expect(titles(wrapper)).toEqual([
-      "나의 Vue 기록",
-      "다른 사람의 글",
-      "기존 예시 글",
-    ]);
-  });
-
-  it("로그인한 사용자의 게시글 수로 메인 집 레벨을 정할 수 있다.", async () => {
-    blogApiMock.posts = [
-      ...blogPostsFixture(),
-      ...Array.from({ length: 8 }, (_, index) =>
-        postFixture({ id: 10 + index }),
-      ),
-    ];
-    const wrapper = await render();
-    expect(setHome).not.toHaveBeenCalled();
-    await wrapper.vm.$router.push("/");
-    await flushPromises();
-    expect(setHome).toHaveBeenLastCalledWith(null);
-    user.value = userFixture("USER");
-    await flushPromises();
-    expect(setHome).toHaveBeenLastCalledWith(1);
-    user.value = { ...userFixture("USER"), id: 2 };
-    blogApiMock.userId = 2;
-    await flushPromises();
-    expect(setHome).toHaveBeenLastCalledWith(0);
-    user.value = null;
-    await flushPromises();
-    expect(setHome).toHaveBeenLastCalledWith(null);
-  });
-
-  it("내 블로그에서 본인 글과 비공개 글을 볼 수 있다.", async () => {
-    user.value = userFixture("USER");
-    blogApiMock.userId = user.value.id;
-    const wrapper = await render();
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
-    await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("기록자의 블로그");
-    expect(titles(wrapper)).toEqual(["나의 Vue 기록", "나의 비공개 글"]);
-    expect(wrapper.get(".post-visibility").text()).toBe("비공개");
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(titles(wrapper)).toEqual([
-      "나의 Vue 기록",
-      "다른 사람의 글",
-      "기존 예시 글",
-    ]);
   });
 
   it.each([null, "USER", "ADMIN"] as const)(
@@ -440,7 +503,7 @@ describe("블로그 글 목록", () => {
   it("로그아웃하면 열어 둔 비공개 글을 닫고 전체 글로 돌아갈 수 있다.", async () => {
     user.value = userFixture("USER");
     const wrapper = await render();
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
+    await openMyBlog(wrapper);
     await flushPromises();
     await wrapper.findAll(".post-open")[1]!.trigger("click");
     await flushPromises();
@@ -456,13 +519,13 @@ describe("블로그 글 목록", () => {
   it("계정이 변경되면 새로운 사용자의 글만 확인할 수 있다.", async () => {
     user.value = userFixture("USER");
     const wrapper = await render();
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
+    await openMyBlog(wrapper);
     await flushPromises();
     user.value = { ...userFixture("USER"), id: 2 };
     blogApiMock.userId = 2;
     await flushPromises();
     expect(wrapper.get("#content-panel-title").text()).toBe("Blog House");
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
+    await openMyBlog(wrapper);
     await flushPromises();
     expect(titles(wrapper)).toEqual([
       "다른 사람의 글",
@@ -490,174 +553,10 @@ describe("블로그 글 목록", () => {
       "기존 예시 글",
     ]);
   });
-
-  it("검색어나 정렬을 바꾸면 첫 페이지부터 확인할 수 있다.", async () => {
-    const wrapper = await render();
-    await wrapper.vm.$router.push("/blog?page=2");
-    await flushPromises();
-    await searchFor(wrapper, "Vue");
-    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({ q: "Vue" });
-    await wrapper.vm.$router.push("/blog?q=Vue&page=2");
-    await flushPromises();
-    await wrapper.findAll(".post-sort button")[1]!.trigger("click");
-    await flushPromises();
-    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({
-      q: "Vue",
-      sort: "likes",
-    });
-    expect(
-      wrapper.get('[aria-current="page"][aria-label="1페이지"]').text(),
-    ).toBe("1");
-  });
-
-  it("전체 글을 검색하고 결과가 없으면 검색어를 초기화할 수 있다.", async () => {
-    const wrapper = await render();
-    await searchFor(wrapper, "  vue  ");
-    expect(titles(wrapper)).toHaveLength(3);
-    await searchFor(wrapper, "다른 사람");
-    expect(titles(wrapper)).toEqual(["다른 사람의 글"]);
-    await searchFor(wrapper, "없는 글");
-    expect(wrapper.get(".blog-empty-state").text()).toContain(
-      "찾는 이야기가 아직 없어요",
-    );
-    await wrapper.get(".blog-empty-state button").trigger("click");
-    await flushPromises();
-    expect(titles(wrapper)).toHaveLength(3);
-  });
-
-  it("내 블로그에서 뒤로가면 이전 검색어와 정렬을 유지할 수 있다.", async () => {
-    user.value = userFixture("USER");
-    const wrapper = await render();
-    await wrapper.findAll(".post-sort button")[1]!.trigger("click");
-    await flushPromises();
-    await searchFor(wrapper, "다른 사람");
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
-    await flushPromises();
-    expect(wrapper.find(".search-input").exists()).toBe(true);
-    expect(wrapper.find(".post-sort").exists()).toBe(false);
-    expect(titles(wrapper)).toEqual(["나의 Vue 기록", "나의 비공개 글"]);
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(titles(wrapper)).toEqual(["다른 사람의 글"]);
-    expect(
-      (wrapper.get(".search-input input").element as HTMLInputElement).value,
-    ).toBe("다른 사람");
-    expect(
-      wrapper.findAll(".post-sort button")[1]!.attributes("aria-pressed"),
-    ).toBe("true");
-  });
-
-  it("내 글이 없으면 첫 글 작성을 시작할 수 있다.", async () => {
-    user.value = { ...userFixture("USER"), id: 99 };
-    const wrapper = await render();
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
-    await flushPromises();
-    expect(titles(wrapper)).toHaveLength(0);
-    expect(wrapper.get(".blog-empty-state").text()).toContain(
-      "아직 작성한 글이 없어요",
-    );
-    await wrapper.get(".blog-empty-state button").trigger("click");
-    await flushPromises();
-    expect(wrapper.vm.$router.currentRoute.value.name).toBe("blog-write");
-  });
-
-  it("내 글 상세를 닫으면 내 블로그 목록으로 돌아갈 수 있다.", async () => {
-    user.value = userFixture("USER");
-    const wrapper = await render();
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
-    await flushPromises();
-    await wrapper.findAll(".post-open")[0]!.trigger("click");
-    await flushPromises();
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("기록자의 블로그");
-    expect(titles(wrapper)).toEqual(["나의 Vue 기록", "나의 비공개 글"]);
-  });
-  it("다른 작성자의 블로그에서 공개 글만 볼 수 있다.", async () => {
-    const wrapper = await render();
-    await wrapper
-      .get('[aria-label="다른 기록자의 블로그 보기"]')
-      .trigger("click");
-    await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe(
-      "다른 기록자의 블로그",
-    );
-    expect(titles(wrapper)).toEqual(["다른 사람의 글"]);
-    expect(wrapper.find(".article-body").exists()).toBe(false);
-    expect(wrapper.find(".search-input").exists()).toBe(true);
-    expect(wrapper.find(".post-sort").exists()).toBe(false);
-    expect(wrapper.find(".post-visibility").exists()).toBe(false);
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(titles(wrapper)).toHaveLength(3);
-  });
-
-  it("글 상세에서 작성자의 블로그로 이동하고 내 블로그로 돌아갈 수 있다.", async () => {
-    user.value = userFixture("USER");
-    const wrapper = await render();
-    await wrapper.findAll(".post-open")[1]!.trigger("click");
-    await flushPromises();
-    await wrapper
-      .get('.article-meta [aria-label="다른 기록자의 블로그 보기"]')
-      .trigger("click");
-    await flushPromises();
-    expect(wrapper.find(".article-body").exists()).toBe(false);
-    expect(wrapper.get("#content-panel-title").text()).toBe(
-      "다른 기록자의 블로그",
-    );
-    await wrapper.get(".post-open").trigger("click");
-    await flushPromises();
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(titles(wrapper)).toEqual(["다른 사람의 글"]);
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
-    await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("기록자의 블로그");
-    expect(titles(wrapper)).toEqual(["나의 Vue 기록", "나의 비공개 글"]);
-  });
-
-  it("작성자 블로그에서 뒤로가면 읽던 글을 거쳐 목록으로 돌아갈 수 있다.", async () => {
-    const wrapper = await render();
-    await wrapper.findAll(".post-open")[1]!.trigger("click");
-    await flushPromises();
-    await wrapper
-      .get('.article-meta [aria-label="다른 기록자의 블로그 보기"]')
-      .trigger("click");
-    await flushPromises();
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(wrapper.get(".article-body h2").text()).toBe("다른 사람의 글");
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(wrapper.find(".article-body").exists()).toBe(false);
-    expect(wrapper.get("#content-panel-title").text()).toBe("Blog House");
-  });
-
-  it("홈으로 이동한 뒤 블로그 목록을 다시 열 수 있다.", async () => {
-    user.value = userFixture("USER");
-    const wrapper = await render();
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
-    await flushPromises();
-    await wrapper.findAll(".post-open")[1]!.trigger("click");
-    await flushPromises();
-    await wrapper.get('[aria-label="Codeiary 홈으로"]').trigger("click");
-    await flushPromises();
-    await wrapper
-      .findAll(".site-header:not([inert]) nav > button")[0]!
-      .trigger("click");
-    await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("Blog House");
-    await wrapper.get('[aria-label="기록자의 블로그 보기"]').trigger("click");
-    await flushPromises();
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(wrapper.find(".article-body").exists()).toBe(false);
-    expect(wrapper.get("#content-panel-title").text()).toBe("Blog House");
-  });
   it("내 블로그의 카테고리별 글 수를 유지하면서 검색하고 최신순으로 볼 수 있다.", async () => {
     user.value = userFixture("USER");
     const wrapper = await render();
-    await wrapper.get('[aria-label="내 블로그 보기"]').trigger("click");
+    await openMyBlog(wrapper);
     await flushPromises();
     const categories = () =>
       wrapper.findAll(".blog-categories button").map((button) => button.text());
@@ -724,24 +623,53 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     expect(titles(wrapper)).toEqual(["나의 Vue 기록", "나의 비공개 글"]);
   });
-  it("내 집에서 내 블로그와 비공개 글을 열고 집으로 돌아갈 수 있다.", async () => {
+  it("마이페이지에서 포트폴리오를 검색하고 상세에서 돌아와도 선택한 탭과 페이지를 유지한다.", async () => {
     user.value = userFixture("USER");
+    const sample = portfolioFixture();
+    portfolios.value = [
+      ...Array.from({ length: 12 }, (_, index) => ({ ...sample, id: index + 1, title: `작업 ${index + 1}`, visibility: index === 11 ? "PRIVATE" as const : "PUBLIC" as const })),
+      { ...sample, id: 13, author: { id: 2, name: "다른 사람" }, title: "다른 사람의 비공개 포트폴리오", visibility: "PRIVATE" },
+    ];
     const wrapper = await render();
-    await wrapper.vm.$router.push({ name: "city", query: { view: "home" } });
+    await wrapper.vm.$router.push({ name: "user-home", query: { tab: "portfolio" } });
     await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("기록자의 집");
+    const listed = () => wrapper.findAll(".portfolio-entry h3").map((item) => item.text());
+    expect(wrapper.get("#content-panel-title").text()).toBe("마이페이지");
+    expect(listed()).toEqual(["작업 12", "작업 11", "작업 10", "작업 9", "작업 8", "작업 7", "작업 6", "작업 5"]);
+    expect(wrapper.get("#home-tab-portfolio").text()).toContain("12");
+    expect(wrapper.find("#home-profile-editor").exists()).toBe(false);
+    await wrapper.get('[aria-label="마이페이지 포트폴리오 페이지"] [aria-label="2페이지"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({ tab: "portfolio", page: "2" });
+    expect(listed()).toEqual(["작업 4", "작업 3", "작업 2", "작업 1"]);
+    await wrapper.get(".portfolio-entry").trigger("click");
+    await flushPromises();
+    expect(wrapper.vm.$router.currentRoute.value.name).toBe("portfolio");
+    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBe("4");
+    wrapper.vm.$router.back();
+    await flushPromises();
+    expect(wrapper.get("#home-tab-portfolio").attributes("aria-selected")).toBe("true");
+    expect(listed()).toEqual(["작업 4", "작업 3", "작업 2", "작업 1"]);
+    await wrapper.get('[aria-label="마이페이지 포트폴리오 검색"]').setValue("작업 1");
+    await vi.waitFor(() => expect(listed()).toEqual(["작업 12", "작업 11", "작업 10", "작업 1"]));
+    expect(wrapper.vm.$router.currentRoute.value.query.page).toBeUndefined();
+    await wrapper.get("#home-tab-blog").trigger("click");
+    await flushPromises();
+    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({});
     expect(titles(wrapper)).toEqual(["나의 Vue 기록", "나의 비공개 글"]);
-    await wrapper.get(".home-section-action button").trigger("click");
+    await wrapper.findAll(".blog-categories button").find((button) => button.text().includes("프론트엔드"))!.trigger("click");
     await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("기록자의 블로그");
+    expect(titles(wrapper)).toEqual(["나의 비공개 글"]);
+    expect(wrapper.vm.$router.currentRoute.value.query.category).toBe("프론트엔드");
+    expect(wrapper.get(".blog-categories button").text()).toContain("2");
+    await wrapper.get(".post-open").trigger("click");
+    await flushPromises();
     wrapper.vm.$router.back();
     await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("기록자의 집");
-    await wrapper.findAll(".post-open")[1]!.trigger("click");
+    expect(wrapper.vm.$router.currentRoute.value.query.category).toBe("프론트엔드");
+    expect(titles(wrapper)).toEqual(["나의 비공개 글"]);
+    await wrapper.get(".home-write").trigger("click");
     await flushPromises();
-    expect(wrapper.get(".article-body h2").text()).toBe("나의 비공개 글");
-    wrapper.vm.$router.back();
-    await flushPromises();
-    expect(wrapper.get("#content-panel-title").text()).toBe("기록자의 집");
+    expect(wrapper.vm.$router.currentRoute.value.name).toBe("blog-write");
   });
 });

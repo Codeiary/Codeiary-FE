@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowR
 import { auth, AuthError, type ProfileUpdateInput, type UserProfile } from "@/store/auth";
 import { nicknameError } from "@/utils/auth/validation";
 import { prepareAvatar } from "@/utils/profile/avatar-upload";
+import Icon from "@/components/Icon.vue";
 
 const props = defineProps<{ user: UserProfile }>();
 const emit = defineEmits<{ saved: []; cancel: [] }>();
@@ -227,7 +228,10 @@ async function save() {
     novalidate
     @submit.prevent="save"
   >
-    <h4 id="profile-editor-title">프로필 수정</h4>
+    <header class="profile-editor-heading">
+      <h4 id="profile-editor-title">프로필 수정</h4>
+      <button type="button" class="profile-editor-close" aria-label="프로필 수정 닫기" :disabled="saving" @click="emit('cancel')"><Icon name="close" :size="19" /></button>
+    </header>
     <div class="profile-photo">
       <div class="profile-photo-preview" aria-hidden="true">
         <img
@@ -272,6 +276,7 @@ async function save() {
             v-model="draft.nickname"
             name="nickname"
             autocomplete="nickname"
+            autofocus
             maxlength="20"
             required
             :aria-invalid="nicknameInvalid"
@@ -329,187 +334,43 @@ async function save() {
 </template>
 
 <style scoped>
-.profile-editor {
-  margin-bottom: 24px;
-  padding: 24px;
-  border: 1px solid var(--theme-border);
-  border-radius: 16px;
-  background: var(--theme-raised);
-  color: var(--theme-text);
-}
-.profile-editor h4 {
-  margin: 0 0 22px;
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: -0.4px;
-}
-.profile-photo {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.profile-photo-preview {
-  display: grid;
-  place-items: center;
-  flex: 0 0 72px;
-  height: 72px;
-  overflow: hidden;
-  border: 1px solid var(--theme-border);
-  border-radius: 22px;
-  background: var(--theme-surface);
-  font-size: 26px;
-  font-weight: 600;
-}
-.profile-photo-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.profile-photo-copy {
-  min-width: 0;
-  font-size: var(--font-size-min, 14px);
-}
-.profile-photo-copy small {
-  margin-left: 6px;
-}
-.profile-photo-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 9px;
-}
-.profile-photo-actions button {
-  min-height: 36px;
-  padding: 7px 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-surface);
-  color: var(--theme-text);
-  font-size: inherit;
-}
-.profile-photo-actions .profile-photo-remove {
-  border-color: transparent;
-  background: transparent;
-  color: var(--theme-muted);
-}
-.profile-photo-progress {
-  margin: 9px 0 0;
-  color: var(--theme-muted);
-  line-height: 1.5;
-}
-.profile-error.profile-photo-error {
-  margin: -8px 0 20px;
-}
-.profile-editor fieldset {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.profile-editor label {
-  display: grid;
-  gap: 9px;
-  min-width: 0;
-  font-size: var(--font-size-min, 14px);
-}
-.profile-nickname-field {
-  grid-column: 1 / -1;
-}
-.profile-nickname-help {
-  min-height: 22px;
-  margin: 8px 0 0;
-  color: var(--theme-muted);
-  font-size: var(--font-size-min, 14px);
-  line-height: 1.5;
-}
-.profile-nickname-help.is-available {
-  color: var(--theme-accent);
-}
-.profile-nickname-help.is-invalid {
-  color: var(--theme-text);
-}
-.profile-nickname-help button {
-  margin-left: 8px;
-  color: var(--theme-accent);
-  font-size: inherit;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.profile-editor label > span {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-}
-.profile-editor small {
-  color: var(--theme-muted);
-  font-size: inherit;
-}
-.profile-editor input {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 9px;
-  background: var(--theme-surface);
-  color: var(--theme-text);
-  font: inherit;
-  font-size: 16px;
-}
-.profile-editor input::placeholder {
-  color: var(--theme-muted);
-}
-.profile-editor input:focus-visible,
-.profile-editor button:focus-visible {
-  outline: 2px solid var(--theme-accent);
-  outline-offset: 2px;
-}
-.profile-editor input[aria-invalid="true"] {
-  border-color: var(--theme-accent);
-}
-.profile-error {
-  margin: 16px 0 0;
-  font-size: var(--font-size-min, 14px);
-  line-height: 1.6;
-}
-.profile-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 24px;
-}
-.profile-actions button {
-  min-height: 40px;
-  padding: 10px 18px;
-  border-radius: 9px;
-  font-size: var(--font-size-min, 14px);
-}
-.profile-cancel {
-  color: var(--theme-muted);
-}
-.profile-save {
-  background: var(--theme-accent);
-  color: var(--theme-surface);
-  font-weight: 650;
-}
-.profile-editor button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.profile-editor[aria-busy="true"] button:disabled {
-  cursor: wait;
-}
-@media (max-width: 760px) {
-  .profile-editor {
-    padding: 20px 16px;
-  }
-  .profile-editor fieldset {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
-  }
+.profile-editor { margin: 0; padding: 28px; color: var(--theme-text); }
+.profile-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.profile-editor h4 { margin: 0; font-size: 23px; font-weight: 650; letter-spacing: -.6px; }
+.profile-editor-close { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; border-radius: 8px; color: var(--theme-muted); }
+.profile-editor-close:hover { background: var(--theme-raised); color: var(--theme-text); }
+.profile-photo { display: flex; align-items: center; gap: 18px; padding: 16px; margin-bottom: 24px; border-radius: 12px; background: var(--theme-raised); }
+.profile-photo-preview { display: grid; place-items: center; flex: 0 0 64px; height: 64px; overflow: hidden; border: 1px solid var(--theme-border); border-radius: 50%; background: var(--theme-surface); font-size: 24px; font-weight: 600; }
+.profile-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.profile-photo-copy { min-width: 0; font-size: 14px; }
+.profile-photo-copy > span { font-weight: 550; }
+.profile-photo-copy small { margin-left: 5px; }
+.profile-photo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+.profile-photo-actions button { min-height: 30px; padding: 5px 10px; border: 1px solid var(--theme-border); border-radius: 7px; background: var(--theme-surface); color: var(--theme-text); font-size: 12px; }
+.profile-photo-actions .profile-photo-remove { border-color: transparent; background: transparent; color: var(--theme-muted); }
+.profile-photo-progress { margin: 8px 0 0; color: var(--theme-muted); font-size: 12px; line-height: 1.5; }
+.profile-error.profile-photo-error { margin: -10px 0 20px; }
+.profile-editor fieldset { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.profile-editor label { display: grid; gap: 8px; min-width: 0; font-size: 14px; font-weight: 550; }
+.profile-editor label > span { display: flex; align-items: baseline; gap: 7px; }
+.profile-editor small { color: var(--theme-muted); font-size: 12px; font-weight: 400; }
+.profile-editor input:not([type="file"]) { width: 100%; min-width: 0; height: 44px; padding: 10px 12px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface); color: var(--theme-text); font: inherit; font-size: 16px; font-weight: 400; }
+.profile-editor input::placeholder { color: var(--theme-muted); opacity: .75; }
+.profile-editor input:focus-visible, .profile-editor button:focus-visible { outline: 2px solid color-mix(in srgb, var(--theme-text) 28%, transparent); outline-offset: 2px; }
+.profile-editor input[aria-invalid="true"] { border-color: var(--theme-accent); }
+.profile-nickname-help { min-height: 18px; margin: 7px 0 0; color: var(--theme-muted); font-size: 12px; line-height: 1.5; }
+.profile-nickname-help.is-available { color: var(--theme-accent); }
+.profile-nickname-help.is-invalid { color: var(--theme-text); }
+.profile-nickname-help button { margin-left: 8px; color: var(--theme-accent); font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.profile-error { margin: 16px 0 0; font-size: 13px; line-height: 1.6; }
+.profile-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--theme-border); }
+.profile-actions button { min-height: 40px; padding: 9px 18px; border-radius: 8px; font-size: 14px; }
+.profile-cancel { background: var(--theme-raised); color: var(--theme-muted); }
+.profile-save { background: var(--theme-text); color: var(--theme-surface); font-weight: 600; }
+.profile-editor button:disabled { opacity: .5; cursor: not-allowed; }
+.profile-editor[aria-busy="true"] button:disabled { cursor: wait; }
+@media (max-width: 600px) {
+  .profile-editor { padding: 22px; }
+  .profile-editor h4 { font-size: 21px; }
 }
 </style>
