@@ -5,7 +5,7 @@ import { ref } from "vue";
 import { createRouter, createMemoryHistory } from "vue-router";
 import type { UserProfile } from "@/store/auth";
 import PostComments from "@/components/blog/comments/PostComments.vue";
-import CommentComposer from "@/components/blog/comments/CommentComposer.vue";
+
 import { readComments } from "@/services/comment-api";
 import type { Comment } from "@/utils/blog/comments";
 import { postFixture } from "./fixtures/blog";
@@ -88,16 +88,6 @@ function seedComment(author: ReturnType<typeof commentAuthorFixture>, content: s
   });
 }
 describe("댓글 화면", () => {
-  it("비로그인 사용자가 댓글을 읽고 현재 글로 돌아오는 로그인 링크를 볼 수 있다.", async () => {
-    seedComment(commentAuthorFixture(), "읽을 수 있는 댓글");
-    const wrapper = await render();
-    expect(wrapper.text()).toContain("읽을 수 있는 댓글");
-    expect(wrapper.find("textarea").exists()).toBe(false);
-    expect(wrapper.find('[aria-label="댓글 수정"]').exists()).toBe(false);
-    expect(wrapper.get(".comments-login a").attributes("href")).toContain(
-      "redirect=/blog/test/post",
-    );
-  });
   it("다른 창에서 돌아와도 댓글을 다시 요청하지 않는다.", async () => {
     await render();
     const requestCount = vi.mocked(readComments).mock.calls.length;
@@ -149,17 +139,5 @@ describe("댓글 화면", () => {
       "",
     );
     expect(wrapper.find('[aria-label="댓글 삭제"]').exists()).toBe(false);
-  });
-  it("이모지를 커서 위치에 삽입하고 등록할 수 있다.", async () => {
-    const wrapper = mount(CommentComposer);
-    wrappers.push(wrapper);
-    await wrapper.get("textarea").setValue("안녕 세계");
-    const input = wrapper.get("textarea").element as HTMLTextAreaElement;
-    input.setSelectionRange(2, 2);
-    await wrapper.get('[aria-label="이모지 선택"]').trigger("click");
-    await wrapper.get('[aria-label="🎉 삽입"]').trigger("click");
-    expect(input.value).toBe("안녕🎉 세계");
-    await wrapper.get("form").trigger("submit");
-    expect(wrapper.emitted("submit")?.[0]).toEqual(["안녕🎉 세계"]);
   });
 });

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { displayName } from "@/utils/profile/display-name";
 import {
   computed,
   nextTick,
@@ -48,6 +47,10 @@ const loadError = ref("");
 const error = ref("");
 const tagInput = ref("");
 const mode = ref<"split" | "write" | "preview">("split");
+const paneLayout = ref<HTMLElement>();
+const previewShare = ref(50);
+const resizingPanes = ref(false);
+let panePointer: { id: number; handle: HTMLElement } | undefined;
 const compactScreen = window.matchMedia("(max-width: 760px)");
 function syncScreenMode() {
   if (compactScreen.matches && mode.value === "split") mode.value = "write";
@@ -55,6 +58,43 @@ function syncScreenMode() {
 }
 function showWriting() {
   mode.value = compactScreen.matches ? "write" : "split";
+}
+function setPreviewShare(value: number) {
+  previewShare.value = Math.min(80, Math.max(20, value));
+}
+function startPaneResize(event: PointerEvent) {
+  if (event.button !== 0 || event.isPrimary === false || mode.value !== "split" || compactScreen.matches) return;
+  event.preventDefault();
+  stopPaneResize();
+  const handle = event.currentTarget as HTMLElement;
+  panePointer = { id: event.pointerId, handle };
+  resizingPanes.value = true;
+  handle.focus({ preventScroll: true });
+  handle.setPointerCapture(event.pointerId);
+}
+function movePaneResize(event: PointerEvent) {
+  if (!panePointer || panePointer.id !== event.pointerId || !paneLayout.value) return;
+  const layout = paneLayout.value;
+  const handleWidth = panePointer.handle.getBoundingClientRect().width;
+  const available = layout.clientWidth - handleWidth;
+  if (available <= 0) return;
+  setPreviewShare((event.clientX - layout.getBoundingClientRect().left - layout.clientLeft - handleWidth / 2) / available * 100);
+}
+function stopPaneResize(event?: PointerEvent) {
+  if (event && event.pointerId !== panePointer?.id) return;
+  const active = panePointer;
+  panePointer = undefined;
+  resizingPanes.value = false;
+  if (active?.handle.hasPointerCapture(active.id)) active.handle.releasePointerCapture(active.id);
+}
+function resizePanesWithKeyboard(event: KeyboardEvent) {
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    setPreviewShare(previewShare.value + (event.key === "ArrowLeft" ? -1 : 1) * (event.shiftKey ? 10 : 2));
+  } else if (["Home", "End", "Enter"].includes(event.key)) {
+    event.preventDefault();
+    setPreviewShare(event.key === "Home" ? 20 : event.key === "End" ? 80 : 50);
+  }
 }
 const editor = ref<InstanceType<typeof MarkdownEditor>>();
 const fileInput = ref<HTMLInputElement>();
@@ -67,10 +107,7 @@ const linkUrl = ref("");
 const linkError = ref("");
 const selectedImage = ref<SelectedImage>();
 const previewPane = ref<HTMLElement>();
-let scrollFrame = 0;
 let restoreFrame = 0;
-let restoringScroll = false;
-const expectedScroll = new WeakMap<HTMLElement, number>();
 const scrollPositions = {
   split: { source: 0, preview: 0 },
   write: { source: 0, preview: 0 },
@@ -82,38 +119,7 @@ function setScroll(element: HTMLElement | undefined, top: number) {
     0,
     Math.min(top, element.scrollHeight - element.clientHeight),
   );
-  expectedScroll.set(element, target);
   element.scrollTop = target;
-}
-function syncScroll(from: "source" | "preview") {
-  if (mode.value !== "split" || restoringScroll) return;
-  const source = editor.value?.scrollElement();
-  const preview = previewPane.value;
-  if (!source || !preview) return;
-  const origin = from === "source" ? source : preview;
-  const target = from === "source" ? preview : source;
-  const expected = expectedScroll.get(origin);
-  expectedScroll.delete(origin);
-  if (expected !== undefined && Math.abs(origin.scrollTop - expected) < 2)
-    return;
-  const range = origin.scrollHeight - origin.clientHeight;
-  if (range <= 0) return;
-  const progress = Math.max(0, Math.min(1, origin.scrollTop / range));
-  cancelAnimationFrame(scrollFrame);
-  scrollFrame = requestAnimationFrame(() => {
-    if (mode.value !== "split" || restoringScroll) return;
-    setScroll(target, progress * (target.scrollHeight - target.clientHeight));
-    // CodeMirror measures wrapped lines after moving its virtual viewport.
-    // Apply the same position once more against the measured height.
-    if (from === "preview")
-      scrollFrame = requestAnimationFrame(() => {
-        if (mode.value === "split" && !restoringScroll)
-          setScroll(
-            target,
-            progress * (target.scrollHeight - target.clientHeight),
-          );
-      });
-  });
 }
 const alignments: { value: ImageAlignment; label: string }[] = [
   { value: "left", label: "왼쪽 정렬" },
@@ -273,25 +279,24 @@ watch(fingerprint, () => {
   }, 900);
 });
 watch(mode, async (current, previous) => {
+  stopPaneResize();
   scrollPositions[previous] = {
     source: editor.value?.scrollElement()?.scrollTop ?? 0,
     preview: previewPane.value?.scrollTop ?? 0,
   };
-  restoringScroll = true;
-  cancelAnimationFrame(scrollFrame);
   cancelAnimationFrame(restoreFrame);
   await nextTick();
   resizeTitle();
   restoreFrame = requestAnimationFrame(() => {
     setScroll(editor.value?.scrollElement(), scrollPositions[current].source);
     setScroll(previewPane.value, scrollPositions[current].preview);
-    restoringScroll = false;
   });
 });
 watch(
   () => draft.title,
   () => nextTick(resizeTitle),
 );
+watch(previewShare, () => nextTick(resizeTitle));
 function format(action: EditorAction) {
   if (mode.value === "preview") showWriting();
   nextTick(() => editor.value?.format(action));
@@ -499,6 +504,7 @@ async function publish() {
       params: {
         authorSlug: authorSlug(post.author?.name || draft.author.name),
         postSlug: post.slug || postSlug(post.title),
+        postId: String(post.id),
       },
       state: { blogPrevious: null, postId: post.id },
     });
@@ -576,8 +582,8 @@ onMounted(async () => {
   }
 });
 onBeforeUnmount(() => {
+  stopPaneResize();
   clearTimeout(timer);
-  cancelAnimationFrame(scrollFrame);
   cancelAnimationFrame(restoreFrame);
   compactScreen.removeEventListener("change", syncScreenMode);
   window.removeEventListener("beforeunload", beforeUnload);
@@ -587,15 +593,29 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="writer-shell">
+  <div class="writer-shell" :class="{ 'is-resizing-panes': resizingPanes }">
     <header class="writer-header">
       <button class="brand" aria-label="내 블로그로 돌아가기" @click="exit">
         <BrandLogo />
       </button>
-      <span class="writer-header-label">/ <span>글쓰기</span></span>
+      <span class="writer-header-label">블로그</span>
+      <div class="writer-header-utilities">
+        <ThemeToggle />
+        <button class="writer-exit" aria-label="나가기" title="나가기" @click="exit"><Icon name="close" :size="18" /></button>
+      </div>
       <div class="writer-header-actions">
-        <ThemeToggle /><button class="writer-exit" @click="exit">
-          <Icon name="close" :size="18" /><span>나가기</span>
+        <button class="writer-preview-toggle" :aria-label="mode === 'preview' ? '작성' : '미리보기'" :aria-pressed="mode === 'preview'"
+          :disabled="loading || !!loadError" @click="mode === 'preview' ? showWriting() : mode = 'preview'">
+          <Icon :name="mode === 'preview' ? 'case' : 'eye'" :size="17" /><span>{{ mode === 'preview' ? '작성' : '미리보기' }}</span>
+        </button>
+        <label class="writer-visibility">
+          <Icon :name="draft.visibility === 'PRIVATE' ? 'lock' : 'eye'" :size="14" />
+          <select v-model="draft.visibility" aria-label="글 공개 설정" :disabled="loading || !!loadError || publishing">
+            <option value="PUBLIC">공개</option><option value="PRIVATE">비공개</option>
+          </select>
+        </label>
+        <button class="writer-publish" :disabled="loading || !!loadError || publishing || uploading" @click="publish">
+          {{ publishing ? "저장 중…" : "저장" }}
         </button>
       </div>
     </header>
@@ -604,43 +624,6 @@ onBeforeUnmount(() => {
       <button v-if="loadError" @click="exit">내 블로그로 돌아가기</button>
     </main>
     <main v-else class="writer-workspace" :aria-busy="publishing">
-      <div class="writer-byline">
-        <span class="writer-author"
-          ><span class="writer-author-dot"></span
-          >{{ displayName(draft.author) }}의
-          {{ draft.postId ? "글 수정" : "새로운 기록" }}</span
-        >
-        <div class="writer-modes" role="group" aria-label="편집 화면 모드">
-          <button :aria-pressed="mode === 'preview'" @click="mode = 'preview'">
-            미리보기</button
-          ><button :aria-pressed="mode !== 'preview'" @click="showWriting">
-            작성
-          </button>
-        </div>
-        <div class="writer-publish-actions">
-          <label class="writer-visibility">
-            <Icon
-              :name="draft.visibility === 'PRIVATE' ? 'lock' : 'eye'"
-              :size="14"
-            />
-            <select
-              v-model="draft.visibility"
-              aria-label="글 공개 설정"
-              :disabled="publishing"
-            >
-              <option value="PUBLIC">공개</option>
-              <option value="PRIVATE">비공개</option>
-            </select>
-          </label>
-          <button
-            class="writer-publish"
-            :disabled="publishing || uploading"
-            @click="publish"
-          >
-            {{ publishing ? "저장 중…" : draft.postId ? "수정" : "생성" }}
-          </button>
-        </div>
-      </div>
       <div
         v-if="selectedImage"
         class="writer-image-settings"
@@ -728,8 +711,8 @@ onBeforeUnmount(() => {
           <Icon name="check" :size="16" /><span>완료</span>
         </button>
       </div>
-      <div class="writer-layout" :data-mode="mode">
-        <section class="writer-preview-column" aria-label="제목과 미리보기">
+      <div ref="paneLayout" class="writer-layout" :data-mode="mode" :style="{ '--writer-preview-share': `${previewShare}fr`, '--writer-source-share': `${100 - previewShare}fr` }">
+        <section id="writer-preview-pane" class="writer-preview-column" aria-label="제목과 미리보기">
           <section class="writer-intro" aria-label="글 정보">
             <div class="writer-title-row">
               <textarea
@@ -832,7 +815,6 @@ onBeforeUnmount(() => {
             <div
               ref="previewPane"
               class="writer-preview-scroll"
-              @scroll="syncScroll('preview')"
             >
               <PostArticle
                 v-if="draft.content || mode === 'preview'"
@@ -854,7 +836,16 @@ onBeforeUnmount(() => {
             </div>
           </section>
         </section>
-        <section class="writer-composer" aria-label="마크다운 글 작성">
+        <div v-if="mode === 'split'" class="writer-divider" role="separator" tabindex="0" aria-orientation="vertical"
+          aria-label="작성·미리보기 너비 조절" aria-controls="writer-preview-pane writer-source-pane"
+          :aria-valuenow="Math.round(previewShare)" :aria-valuemin="20" :aria-valuemax="80"
+          :aria-valuetext="`미리보기 ${Math.round(previewShare)}%, 작성 ${100 - Math.round(previewShare)}%`"
+          title="드래그하여 너비 조절 · 두 번 클릭하면 반반"
+          @pointerdown="startPaneResize" @pointermove="movePaneResize" @pointerup="stopPaneResize"
+          @pointercancel="stopPaneResize" @lostpointercapture="stopPaneResize"
+          @keydown="resizePanesWithKeyboard" @dblclick="setPreviewShare(50)"
+        ></div>
+        <section id="writer-source-pane" class="writer-composer" aria-label="마크다운 글 작성">
           <div class="writer-toolbar">
             <div class="writer-tools" role="toolbar" aria-label="마크다운 서식">
               <button
@@ -919,7 +910,6 @@ onBeforeUnmount(() => {
               :disabled="publishing"
               @save="saveNow"
               @images="insertImages"
-              @scroll="syncScroll('source')"
             />
           </section>
         </section>

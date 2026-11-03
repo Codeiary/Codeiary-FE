@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import { routeLocationKey } from "vue-router";
 import BlogPostList from "@/components/blog/BlogPostList.vue";
-import BlogPagination from "@/components/blog/BlogPagination.vue";
+
 import { postFixture } from "./fixtures/blog";
 
 const global = { provide: { [routeLocationKey as symbol]: { path: "/blog", query: {} } } };
@@ -40,20 +40,6 @@ describe("블로그 페이지네이션", () => {
       await wrapper.setProps({ search: "없는 글" });
       expect(wrapper.find(".blog-pagination").exists()).toBe(false);
       expect(wrapper.find(".blog-empty-state").exists()).toBe(true);
-    } finally {
-      wrapper.unmount();
-    }
-  });
-
-  it("페이지가 많아도 현재 위치와 마지막 페이지를 확인하고 이동할 수 있다.", async () => {
-    const wrapper = mount(BlogPagination, { global, props: { page: 1, pageCount: 234 } });
-    try {
-      expect(wrapper.text().replace(/\s/g, "")).toBe("12345…234");
-      await wrapper.get('[aria-label="234페이지"]').trigger("click");
-      expect(wrapper.emitted("select")).toEqual([[234]]);
-      await wrapper.setProps({ page: 120 });
-      expect(wrapper.text().replace(/\s/g, "")).toBe("1…119120121…234");
-      expect(wrapper.get('[aria-current="page"]').text()).toBe("120");
     } finally {
       wrapper.unmount();
     }

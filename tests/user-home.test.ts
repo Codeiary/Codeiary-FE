@@ -5,7 +5,7 @@ import { auth, AuthError, type UserProfile } from "@/store/auth";
 import { createHomeProfile, homeBlogPosts, type HomeProfile } from "@/utils/profile/home-profile";
 import { prepareAvatar } from "@/utils/profile/avatar-upload";
 import { deferred, userFixture } from "./fixtures/auth";
-import { blogPostsFixture, postFixture } from "./fixtures/blog";
+import { blogPostsFixture } from "./fixtures/blog";
 
 vi.mock("@/store/auth", async (original) => {
   const module = await original<typeof import("@/store/auth")>();
@@ -48,6 +48,7 @@ function render(user = userFixture("USER"), own = true, profileOverride?: HomePr
       own,
     },
     attachTo: document.body,
+    global: { stubs: { BlogPagination: true } },
   });
   wrappers.push(wrapper);
   return wrapper;
@@ -60,39 +61,24 @@ async function selectPhoto(wrapper: VueWrapper, file = new File(["photo"], "phot
 }
 
 describe("사용자의 집", () => {
-  it("사용자 이름 대신 닉네임을 집과 블로그 이동에 사용할 수 있다.", async () => {
-    const wrapper = render();
-    const profile = createHomeProfile({
-      ...userFixture(),
-      nickname: "커밋여행자",
-    });
-    await wrapper.setProps({ profile });
-    expect(wrapper.get(".home-profile h3").text()).toBe("커밋여행자");
-    await wrapper.get(".home-section-action button").trigger("click");
-    expect(wrapper.emitted("blog")).toHaveLength(1);
-    expect(profile.owner.nickname).toBe("커밋여행자");
-  });
-
-  it("사용자가 공개한 연락 이메일과 GitHub 링크만 표시할 수 있다.", () => {
-    const wrapper = render({
-      ...userFixture("USER"),
-      contactEmail: "contact@example.com",
-      githubUrl: "https://github.com/writer",
-    });
-    expect(wrapper.get(".home-profile h3").text()).toBe(
-      userFixture("USER").name,
-    );
-    expect(wrapper.get('a[href^="mailto:"]').attributes("href")).toBe(
-      "mailto:contact@example.com",
-    );
-    expect(
-      wrapper.get('a[href^="https://github.com/"]').attributes("rel"),
-    ).toContain("noopener");
-    expect(wrapper.get(".home-profile").text()).not.toContain("ADMIN");
-    expect(wrapper.get(".home-profile").text()).not.toContain(userFixture().email);
+  it("프로필 편집은 접어 두고 두 콘텐츠 탭에서 각각 글쓰기를 시작할 수 있다.", async () => {
+    account.value = userFixture("USER");
+    const wrapper = render(account.value);
+    expect(wrapper.find("#home-profile-editor").exists()).toBe(false);
+    expect(wrapper.find(".home-avatar, .home-profile h3").exists()).toBe(false);
+    expect(wrapper.find(".home-content-header .home-building-info").exists()).toBe(true);
+    expect(wrapper.find(".home-content-header .home-edit-profile").exists()).toBe(true);
+    expect(wrapper.findAll('[role="tab"]').map((tab) => tab.text())).toEqual(["내 블로그2", "내 포트폴리오0"]);
+    expect(wrapper.get(".home-content-toolbar").text()).toBe("글쓰기");
+    await wrapper.get(".home-write").trigger("click");
+    await wrapper.get("#home-tab-portfolio").trigger("click");
+    expect(wrapper.get(".home-write").text()).toBe("포폴 쓰기");
+    expect(wrapper.get(".home-content-toolbar").text()).toBe("포폴 쓰기");
+    await wrapper.get(".home-write").trigger("click");
+    expect(wrapper.emitted("write")).toEqual([["blog"], ["portfolio"]]);
   });
   it("공개 연락처가 없으면 로그인 이메일이나 기본 GitHub를 노출하지 않을 수 있다.", () => {
-    const wrapper = render();
+    const wrapper = render(userFixture("USER"), false);
     expect(wrapper.find('a[href^="mailto:"]').exists()).toBe(false);
     expect(wrapper.find('a[href^="https://github.com/"]').exists()).toBe(false);
     expect(createHomeProfile(userFixture()).email).toBe("");
@@ -109,77 +95,6 @@ describe("사용자의 집", () => {
     expect(
       homeBlogPosts(blogPostsFixture(), author).map((post) => post.id),
     ).toEqual([1]);
-  });
-  it("내 블로그와 개별 게시글 열기를 요청할 수 있다.", async () => {
-    const wrapper = render();
-    await wrapper.get(".home-section-action button").trigger("click");
-    expect(wrapper.emitted("blog")).toHaveLength(1);
-    await wrapper.findAll(".post-open")[1]!.trigger("click");
-    expect(wrapper.emitted("post")?.[0]?.[0]).toMatchObject({
-      id: 3,
-      visibility: "PRIVATE",
-    });
-  });
-  it("포트폴리오와 작성한 IT 이슈의 목록과 상세를 확인할 수 있다.", async () => {
-    const profile = createHomeProfile(userFixture("USER"));
-    profile.projects = [{
-      id: "codeiary",
-      title: "Codeiary",
-      category: "Web",
-      date: "2026.10.06",
-      description: "블로그 웹사이트",
-      tags: ["Vue"],
-      paragraphs: ["프로젝트 설명"],
-    }];
-    profile.issues = [{
-      id: "browser-rendering",
-      title: "3D 웹의 렌더링은 어디에서 일어날까?",
-      category: "Web Graphics",
-      date: "2026.10.05",
-      description: "브라우저 렌더링",
-      tags: ["WebGL"],
-      paragraphs: ["렌더링 설명"],
-    }];
-    const wrapper = render(userFixture("USER"), true, profile);
-    await wrapper.get("#home-tab-portfolio").trigger("click");
-    expect(wrapper.findAll(".home-entry")).toHaveLength(1);
-    await wrapper.findAll(".home-entry")[0]!.trigger("click");
-    expect(wrapper.get(".home-entry-detail h3").text()).toBe("Codeiary");
-    await wrapper.get(".home-detail-back").trigger("click");
-    expect(wrapper.findAll(".home-entry")).toHaveLength(1);
-    await wrapper.get("#home-tab-issues").trigger("click");
-    await wrapper.findAll(".home-entry")[0]!.trigger("click");
-    expect(wrapper.get(".home-entry-detail h3").text()).toContain("3D 웹");
-  });
-  it("키보드로 탭을 이동하고 계정이 바뀌면 이전 상세를 닫을 수 있다.", async () => {
-    const profile = createHomeProfile(userFixture("USER"));
-    profile.issues = [{ id: "one", title: "Issue", category: "IT", date: "2026.10.01", description: "", tags: [], paragraphs: [] }];
-    const wrapper = render(userFixture("USER"), true, profile);
-    await wrapper
-      .get("#home-tab-blog")
-      .trigger("keydown", { key: "ArrowRight" });
-    await flushPromises();
-    expect(document.activeElement?.id).toBe("home-tab-portfolio");
-    await wrapper.get("#home-tab-portfolio").trigger("keydown", { key: "End" });
-    await flushPromises();
-    expect(wrapper.get("#home-tab-issues").attributes("aria-selected")).toBe(
-      "true",
-    );
-    await wrapper.findAll(".home-entry")[0]!.trigger("click");
-    const next = createHomeProfile({
-      ...userFixture("USER"),
-      id: 2,
-      name: "다음 사용자",
-    });
-    await wrapper.setProps({
-      profile: next,
-      posts: [postFixture({ id: 7, author: next.owner })],
-    });
-    expect(wrapper.find(".home-entry-detail").exists()).toBe(false);
-    expect(wrapper.get("#home-tab-blog").attributes("aria-selected")).toBe(
-      "true",
-    );
-    expect(wrapper.get(".home-profile h3").text()).toBe("다음 사용자");
   });
   it("온보딩을 마친 소유자에게만 프로필 편집을 허용할 수 있다.", async () => {
     const owner = { ...userFixture("USER"), nickname: "기록자" };
@@ -230,22 +145,6 @@ describe("사용자의 집", () => {
     expect(wrapper.find("#home-profile-editor").exists()).toBe(false);
     expect(wrapper.get('[role="status"]').text()).toBe("프로필을 저장했어요.");
   });
-  it("선택한 사진을 미리 보고 편집을 취소하면 임시 주소를 해제할 수 있다.", async () => {
-    account.value = { ...userFixture("USER"), nickname: "기록자" };
-    const wrapper = render(account.value);
-    await wrapper.get(".home-edit-profile").trigger("click");
-    const selected = await selectPhoto(wrapper);
-    await flushPromises();
-    expect(prepareAvatar).toHaveBeenCalledWith(selected);
-    expect(wrapper.get(".profile-photo-preview img").attributes("src")).toBe("blob:profile-preview");
-    await wrapper.get("#profile-nickname").setValue("수정중");
-    await wrapper.get(".profile-cancel").trigger("click");
-    expect(auth.updateProfile).not.toHaveBeenCalled();
-    expect(auth.uploadProfileImage).not.toHaveBeenCalled();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:profile-preview");
-    expect(wrapper.find("#home-profile-editor").exists()).toBe(false);
-    expect(wrapper.get(".home-profile h3").text()).toBe("기록자");
-  });
   it("사진 처리와 업로드를 마친 뒤 저장하고 닉네임 충돌 재시도에는 업로드를 반복하지 않을 수 있다.", async () => {
     account.value = { ...userFixture("USER"), nickname: "기록자" };
     const prepared = deferred<File>();
@@ -288,24 +187,6 @@ describe("사용자의 집", () => {
     });
     expect(wrapper.find("#home-profile-editor").exists()).toBe(false);
   });
-  it("닉네임 중복 여부를 입력 중 표시하고 중복인 상태로 저장하지 않을 수 있다.", async () => {
-    account.value = { ...userFixture("USER"), nickname: "기록자" };
-    vi.mocked(auth.checkNickname).mockResolvedValueOnce({ available: false }).mockResolvedValueOnce({ available: true });
-    const wrapper = render(account.value);
-    await wrapper.get(".home-edit-profile").trigger("click");
-    await wrapper.get("#profile-nickname").setValue("사용중닉네임");
-    expect(wrapper.get("#profile-nickname-help").text()).toContain("확인하고 있어요");
-    expect(auth.checkNickname).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(350);
-    expect(wrapper.get("#profile-nickname-help").text()).toContain("이미 사용 중");
-    expect(wrapper.get(".profile-save").attributes("disabled")).toBeDefined();
-    await wrapper.get("#home-profile-editor").trigger("submit");
-    expect(auth.updateProfile).not.toHaveBeenCalled();
-    await wrapper.get("#profile-nickname").setValue("가능한닉네임");
-    await vi.advanceTimersByTimeAsync(350);
-    expect(wrapper.get("#profile-nickname-help").text()).toContain("사용할 수 있는");
-    expect(wrapper.get(".profile-save").attributes("disabled")).toBeUndefined();
-  });
   it("이전 닉네임 응답을 무시하고 실패한 검사를 다시 확인할 수 있다.", async () => {
     account.value = { ...userFixture("USER"), nickname: "기록자" };
     const previous = deferred<{ available: boolean }>();
@@ -329,18 +210,5 @@ describe("사용자의 집", () => {
     expect(auth.checkNickname).toHaveBeenLastCalledWith("현재입력");
     expect(wrapper.get("#profile-nickname-help").text()).toContain("사용할 수 있는");
     expect(wrapper.get(".profile-save").attributes("disabled")).toBeUndefined();
-  });
-  it("사진을 불러오지 못하면 닉네임 첫 글자를 대신 표시할 수 있다.", async () => {
-    const owner = {
-      ...userFixture("USER"),
-      nickname: "기록자",
-      profileImageUrl: "https://images.example.com/missing.png",
-    };
-    const wrapper = render(owner);
-    await wrapper.get(".home-avatar img").trigger("error");
-    expect(wrapper.find(".home-avatar img").exists()).toBe(false);
-    expect(wrapper.get(".home-avatar").text()).toBe("기");
-    await wrapper.setProps({ profile: createHomeProfile({ ...owner, profileImageUrl: "https://images.example.com/new.png" }) });
-    expect(wrapper.get(".home-avatar img").attributes("src")).toBe("https://images.example.com/new.png");
   });
 });

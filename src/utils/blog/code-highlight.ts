@@ -14,7 +14,7 @@ import go from "highlight.js/lib/languages/go";
 import rust from "highlight.js/lib/languages/rust";
 import cpp from "highlight.js/lib/languages/cpp";
 
-for (const [name, grammar] of Object.entries({
+export const codeGrammars = {
   java,
   javascript,
   typescript,
@@ -29,7 +29,8 @@ for (const [name, grammar] of Object.entries({
   go,
   rust,
   cpp,
-})) {
+};
+for (const [name, grammar] of Object.entries(codeGrammars)) {
   hljs.registerLanguage(name, grammar);
 }
 
