@@ -11,6 +11,8 @@ import PortfolioDocument from "@/components/portfolio/PortfolioDocument.vue";
 import PortfolioPdfButton from "@/components/portfolio/PortfolioPdfButton.vue";
 import { auth } from "@/store/auth";
 import { portfolios } from "@/store/portfolio";
+import { createPortfolio, fetchPortfolioFonts } from "@/services/portfolio-api";
+import { measurePortfolioBlocks, portfolioPayload } from "@/utils/portfolio/api-payload";
 import {
   blocksFromMarkdown, blocksToMarkdown, createPortfolioBlock,
   PORTFOLIO_TITLE_ID, type PortfolioBlock, type PortfolioBlockType, type PortfolioTextRun,
@@ -163,6 +165,10 @@ async function save() {
   const owner = user.value;
   if (busy.value || !owner) return;
   error.value = "";
+  if (existing.value) {
+    error.value = "현재는 새 포트폴리오 저장만 가능해요.";
+    return;
+  }
   if (!draft.title.trim()) {
     error.value = "제목을 입력해 주세요.";
     previewOnly.value = false;
@@ -180,12 +186,18 @@ async function save() {
     return;
   }
   const content = blocksToMarkdown(draft.blocks);
-  if (!draft.blocks.some((block) => (block.content.trim() || block.imageUrl))) {
+  if (!draft.blocks.length) {
     error.value = "텍스트나 이미지를 추가해 주세요.";
     return;
   }
   saving.value = true;
   try {
+    previewOnly.value = false;
+    await nextTick();
+    const [fonts, layouts] = await Promise.all([
+      fetchPortfolioFonts(), measurePortfolioBlocks(canvas.value!, draft.blocks),
+    ]);
+    const input = portfolioPayload(draft, fonts, layouts);
     const data = {
       title: draft.title, titleRuns: draft.titleRuns.map((run) => ({ ...run })), titleAlign: draft.titleAlign, content,
       summary: content.replace(/[#>*`_~\[\]()!|\\-]/g, " ").replace(/\s+/g, " ").slice(0, 140),
@@ -193,14 +205,12 @@ async function save() {
       blocks: draft.blocks.map((block) => ({ ...block })),
       visibility: draft.visibility,
     };
-    let id = existing.value?.id;
-    if (existing.value) Object.assign(existing.value, data);
-    else {
-      id = Math.max(0, ...portfolios.value.map((item) => item.id)) + 1;
-      portfolios.value.unshift({ ...data, id, author: { id: owner.id, name: owner.nickname || owner.name } });
-    }
+    const { id } = await createPortfolio(input);
+    portfolios.value.unshift({ ...data, id, author: { id: owner.id, name: owner.nickname || owner.name } });
     savedSnapshot.value = snapshot();
     await router.push({ name: "portfolio", query: { portfolioId: String(id) } });
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : "포트폴리오를 저장하지 못했어요. 다시 시도해 주세요.";
   } finally {
     saving.value = false;
   }
@@ -258,7 +268,7 @@ onBeforeUnmount(() => {
       <section class="portfolio-studio-canvas-column" aria-label="포트폴리오 캔버스">
         <div class="portfolio-canvas-scroll">
           <div ref="canvas" class="portfolio-canvas-page" :class="{ 'is-empty': !draft.blocks.length }">
-            <PortfolioDocument :post="previewPost" :title-runs="draft.titleRuns" :title-align="draft.titleAlign" :blocks="draft.blocks" :editable="!previewOnly && canEdit" :selected-block="selectedId" toolbar-target="#portfolio-text-tools" @update:title="draft.title = $event" @update:title-runs="draft.titleRuns = $event" @update-block="updateBlock" @select-block="selectBlock" />
+            <PortfolioDocument :post="previewPost" :title-runs="draft.titleRuns" :title-align="draft.titleAlign" :blocks="draft.blocks" :editable="!previewOnly && canEdit && !saving" :selected-block="selectedId" toolbar-target="#portfolio-text-tools" @update:title="draft.title = $event" @update:title-runs="draft.titleRuns = $event" @update-block="updateBlock" @select-block="selectBlock" />
             <div v-if="!draft.blocks.length && !previewOnly" class="portfolio-canvas-empty">
               <button class="portfolio-empty-mark" aria-label="텍스트 추가" :disabled="busy" @click="addBlock('text')"><Icon name="plus" :size="28" /></button>
             </div>

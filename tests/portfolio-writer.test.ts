@@ -9,6 +9,19 @@ import { auth, type UserProfile } from "@/store/auth";
 import { portfolios, type PortfolioItem } from "@/store/portfolio";
 import { contentFromEditorDocument } from "@/utils/portfolio/rich-text";
 import { userFixture } from "./fixtures/auth";
+import { createPortfolio, fetchPortfolioFonts } from "@/services/portfolio-api";
+
+vi.mock("@/services/portfolio-api", () => ({
+  createPortfolio: vi.fn(async () => ({ id: 700 })),
+  fetchPortfolioFonts: vi.fn(async () => [
+    { id: 1, code: "sans" }, { id: 2, code: "serif" }, { id: 3, code: "mono" }, { id: 9, code: "jua" },
+  ]),
+}));
+vi.mock("@/utils/portfolio/api-payload", async (original) => ({
+  ...await original<typeof import("@/utils/portfolio/api-payload")>(),
+  measurePortfolioBlocks: vi.fn(async (_canvas, blocks) => new Map(blocks.map((block: { id: string }) =>
+    [block.id, { x: 10, y: 20, widthPx: 600, heightPx: 100 }]))),
+}));
 
 vi.mock("@/store/auth", async () => {
   const { shallowRef } = await import("vue");
@@ -160,69 +173,65 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
     vi.unstubAllGlobals();
   });
 
-  it("기존 원문을 보존하며 디자인과 블록 설정을 저장하고 다시 편집한다", async () => {
-    const source = "## 구현 기록\n\n| 선택 | 이유 |\n| --- | --- |\n| Vue | **반응성** |\n\n[작업 저장소](https://github.com/example/work)\n";
+  it("수정 API가 없는 기존 포트폴리오는 저장됐다고 표시하거나 캐시를 변경하지 않는다", async () => {
     const original: PortfolioItem = {
-      id: 42, author: { id: 1, name: "기록자" }, title: "기존 작업", summary: "기존 요약", content: source,
-      visibility: "PRIVATE",
-      blocks: [{ id: "legacy-body", type: "markdown", content: source, align: "left", position: { x: 65, y: 40, width: 30 } }],
+      id: 42, author: { id: 1, name: "기록자" }, title: "기존 작업", summary: "기존 요약", content: "## 구현 기록",
+      visibility: "PRIVATE", blocks: [{ id: "legacy-body", type: "markdown", content: "## 구현 기록", align: "left" }],
     };
     portfolios.value = [copy(original)];
     const { wrapper, router } = await render(42);
-
     await canvasBlocks(wrapper)[0]!.trigger("click");
-    expect(canvasBlocks(wrapper)[0]!.text()).toContain("구현 기록");
-    expect(wrapper.find('[aria-label="포트폴리오 편집 설정"] textarea').exists()).toBe(false);
-    await button(wrapper, "가운데 정렬").trigger("click");
-    // Pointer geometry is covered by PortfolioDocument; verify its resize event
-    // survives the actual writer save/reopen flow.
-    wrapper.getComponent(PortfolioDocument).vm.$emit("updateBlock", "legacy-body", {
-      position: { x: 50, y: 40, width: 50, height: 120 },
-    });
+    await writeCanvas(wrapper, "수정 중인 본문");
+    await button(wrapper, "저장").trigger("click");
     await flushPromises();
-    await button(wrapper, "블록 위로 이동").trigger("click");
-    await button(wrapper, "블록 위로 이동").trigger("click");
-    expect(renderedPosition(wrapper, "legacy-body").y).toBe(0);
-    expect(button(wrapper, "블록 위로 이동").attributes("disabled")).toBeDefined();
-    await button(wrapper, "블록 아래로 이동").trigger("click");
-    await button(wrapper, "블록 아래로 이동").trigger("click");
-    await openPageDesign(wrapper);
-    const pagePanel = wrapper.get('[aria-label="포트폴리오 편집 설정"]');
-    expect(pagePanel.find("details, summary").exists()).toBe(false);
-    expect(pagePanel.find('[aria-label="페이지 너비 조절"], [aria-label="페이지 너비(px)"]').exists()).toBe(false);
-    expect(pagePanel.find('[aria-label="페이지 글꼴"]').exists()).toBe(false);
-    expect(wrapper.find('.writer-header [aria-label="포트폴리오 공개 설정"]').exists()).toBe(true);
+    expect(router.currentRoute.value.name).toBe("portfolio-write");
+    expect(wrapper.get('[role="alert"]').text()).toContain("새 포트폴리오 저장만 가능");
     expect(portfolios.value[0]).toEqual(original);
+    expect(createPortfolio).not.toHaveBeenCalled();
+  });
 
+  it("저장 실패 시 입력 내용을 유지하고 성공 응답의 ID로 이동한다", async () => {
+    const { wrapper, router } = await render();
+    await writeTitle(wrapper, "서버 저장");
+    await button(wrapper, "텍스트 블록 추가").trigger("click");
+    await writeCanvas(wrapper, "저장할 본문");
+    vi.mocked(createPortfolio).mockRejectedValueOnce(new Error("서버 저장 실패"));
     await button(wrapper, "저장").trigger("click");
     await flushPromises();
-    expect(router.currentRoute.value.name).toBe("portfolio");
-    expect(router.currentRoute.value.query.portfolioId).toBe("42");
-    const saved = copy(portfolios.value[0]!);
-    expect(saved.content).toBe(source);
-    expect(saved.visibility).toBe("PRIVATE");
-    expect(saved.blocks).toEqual([expect.objectContaining({
-      type: "markdown", content: source, align: "center", position: { x: 50, y: 40, width: 50, height: 120 },
-    })]);
-
-    await router.push({ name: "portfolio-write", query: { id: "42" } });
-    await flushPromises();
-    await openPageDesign(wrapper);
-    await canvasBlocks(wrapper)[0]!.trigger("click");
-    expect(canvasBlocks(wrapper)[0]!.text()).toContain("구현 기록");
-    expect(button(wrapper, "가운데 정렬").attributes("aria-pressed")).toBe("true");
-    expect(pagePanel.find('[aria-label="블록 배경"], [aria-label="블록 너비"]').exists()).toBe(false);
-    expect(canvasBlocks(wrapper)[0]!.attributes("style")).toContain("width: 50%");
-    expect(canvasBlocks(wrapper)[0]!.attributes("style")).toContain("height: 120px");
-    expect(canvasBlocks(wrapper)[0]!.attributes("data-block-id")).toBe(saved.blocks![0]!.id);
-    expect(portfolios.value[0]).toEqual(saved);
-    await writeCanvas(wrapper, "캔버스에서 직접 고친 본문입니다.");
-    // The stored source stays intact until an actual edit is saved.
-    expect(portfolios.value[0]!.content).toBe(source);
+    expect(wrapper.get('[role="alert"]').text()).toContain("서버 저장 실패");
+    expect(portfolios.value).toHaveLength(0);
+    expect(router.currentRoute.value.name).toBe("portfolio-write");
+    expect(canvasText(wrapper)).toContain("저장할 본문");
     await button(wrapper, "저장").trigger("click");
     await flushPromises();
-    expect(portfolios.value[0]!.blocks![0]).toMatchObject({ type: "markdown", content: "캔버스에서 직접 고친 본문입니다." });
-    expect(portfolios.value[0]!.content).not.toContain("| 선택 | 이유 |");
+    expect(fetchPortfolioFonts).toHaveBeenCalled();
+    expect(createPortfolio).toHaveBeenLastCalledWith(expect.objectContaining({ title: "서버 저장", defaultFontId: 1 }));
+    expect(router.currentRoute.value.query.portfolioId).toBe("700");
+    expect(portfolios.value[0]!.id).toBe(700);
+  });
+
+  it("크기 입력 중 포커스를 본문으로 옮겨 숫자가 본문에 입력되지 않도록 한다", async () => {
+    const { wrapper } = await render();
+    await writeTitle(wrapper, "제목 유지");
+    activeEditor(wrapper).commands.selectAll();
+    const size = wrapper.get<HTMLInputElement>('input[aria-label="선택 글자 크기"]');
+    size.element.focus();
+    await size.setValue("22");
+    expect(document.activeElement).toBe(size.element);
+    expect(activeEditor(wrapper).getText()).toBe("제목 유지");
+    expect(activeEditor(wrapper).getAttributes("textStyle").fontSize).toBe("22px");
+  });
+
+  it("빈 텍스트 블록도 저장 API로 보낼 수 있다", async () => {
+    const { wrapper, router } = await render();
+    await writeTitle(wrapper, "빈 본문");
+    await button(wrapper, "텍스트 블록 추가").trigger("click");
+    await button(wrapper, "저장").trigger("click");
+    await flushPromises();
+    expect(createPortfolio).toHaveBeenCalledWith(expect.objectContaining({
+      blocks: [expect.objectContaining({ type: "TEXT", content: "" })],
+    }));
+    expect(router.currentRoute.value.query.portfolioId).toBe("700");
   });
 
   it("캔버스 편집·위치 이동·실행 취소·복제·삭제 복원 결과를 저장하고 다시 편집한다", async () => {

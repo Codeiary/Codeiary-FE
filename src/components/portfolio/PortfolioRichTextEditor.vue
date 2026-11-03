@@ -109,11 +109,11 @@ function setFont(event: Event) {
 function setSize(event: Event) {
   const size = Number((event.target as HTMLInputElement).value);
   if (Number.isFinite(size) && size >= 10 && size <= 96)
-    editor.value?.chain().focus().setFontSize(`${size}px`).run();
+    editor.value?.chain().setFontSize(`${size}px`).run();
 }
 function setColor(event: Event) {
   const color = (event.target as HTMLInputElement).value;
-  if (/^#[\da-f]{6}$/i.test(color)) editor.value?.chain().focus().setColor(color).run();
+  if (/^#[\da-f]{6}$/i.test(color)) editor.value?.chain().setColor(color).run();
 }
 watch(() => props.disabled, (disabled) => editor.value?.setEditable(!disabled));
 watch(() => [props.content, props.runs, props.document] as const, ([content, runs, document]) => {
