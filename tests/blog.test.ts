@@ -59,6 +59,12 @@ vi.mock("@/services/blog-api", () => ({
   updatePost: vi.fn(),
   removePost: vi.fn(),
 }));
+vi.mock("@/services/profile-api", () => ({
+  fetchHomeProfile: vi.fn(async (nickname: string | number) => ({
+    owner: { id: nickname === "기록자" || nickname === 1 ? 1 : 2, name: String(nickname), nickname: String(nickname) },
+    email: "", github: "", profileImageUrl: null,
+  })),
+}));
 vi.mock("@/services/portfolio-api", () => ({
   removePortfolio: vi.fn(async () => {}),
   fetchPortfolio: vi.fn(async (id: number) => {
@@ -331,7 +337,7 @@ describe("블로그 글 목록", () => {
     expect(removePortfolio).toHaveBeenCalledExactlyOnceWith(1);
     expect(portfolios.value.some((item) => item.id === 1)).toBe(false);
     expect(wrapper.find("dialog").exists()).toBe(false);
-    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBeUndefined();
+    expect(wrapper.vm.$router.currentRoute.value.params.portfolioId).toBeUndefined();
   });
 
   it("삭제 실패 시 확인창과 문서를 유지하고 서버 성공 후에만 목록으로 이동한다", async () => {
@@ -348,7 +354,7 @@ describe("블로그 글 목록", () => {
     await flushPromises();
     expect(wrapper.get("dialog").text()).toContain("삭제 실패");
     expect(portfolios.value).toHaveLength(1);
-    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBe("1");
+    expect(wrapper.vm.$router.currentRoute.value.params.portfolioId).toBe("1");
     let finish!: () => void;
     vi.mocked(removePortfolio).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     await wrapper.get(".post-delete-submit").trigger("click");
@@ -357,7 +363,37 @@ describe("블로그 글 목록", () => {
     finish();
     await flushPromises();
     expect(portfolios.value).toHaveLength(0);
-    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBeUndefined();
+    expect(wrapper.vm.$router.currentRoute.value.params.portfolioId).toBeUndefined();
+  });
+
+  it("내 집과 이웃집을 닉네임 주소로 열고 탭을 누르기 전에도 공개 범위에 맞는 포트폴리오 수를 표시한다", async () => {
+    const sample = portfolioFixture();
+    portfolios.value = [sample, { ...sample, id: 2, visibility: "PRIVATE" },
+      { ...sample, id: 3, author: { id: 2, name: "이웃" } },
+      { ...sample, id: 4, author: { id: 2, name: "이웃" }, visibility: "PRIVATE" }];
+    user.value = { ...userFixture("USER"), nickname: "기록자" };
+    const wrapper = await render();
+    await wrapper.vm.$router.push("/기록자");
+    await vi.waitFor(() => expect(wrapper.get("#home-tab-portfolio").text()).toBe("내 포트폴리오2"));
+    expect(wrapper.vm.$router.currentRoute.value.name).toBe("user-profile");
+    expect(wrapper.get("#home-tab-blog").attributes("aria-selected")).toBe("true");
+    await wrapper.vm.$router.push("/이웃");
+    await vi.waitFor(() => expect(wrapper.get("#home-tab-portfolio").text()).toBe("포트폴리오1"));
+    await wrapper.get("#home-tab-portfolio").trigger("click");
+    await vi.waitFor(() => expect(wrapper.findAll(".portfolio-entry")).toHaveLength(1));
+    expect(wrapper.find(".home-write").exists()).toBe(false);
+  });
+
+  it("상세의 전체 화면 링크로 이동하면 상단 바 없이 보기 주소를 유지한다", async () => {
+    portfolios.value = [portfolioFixture()];
+    const wrapper = await render();
+    await wrapper.vm.$router.push({ name: "portfolio", query: { portfolioId: "1" } });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="전체 화면 보기"]').exists()).toBe(true));
+    await wrapper.get('[aria-label="전체 화면 보기"]').trigger("click");
+    await vi.waitFor(() => expect(wrapper.find(".portfolio-presentation").exists()).toBe(true));
+    expect(wrapper.vm.$router.currentRoute.value.name).toBe("portfolio-view");
+    expect(wrapper.vm.$router.currentRoute.value.path).toMatch(/\/1\/view$/);
+    expect(wrapper.find(".site-header").exists()).toBe(false);
   });
 
   it("캐시 없이 상세를 복원하고 늦게 도착한 이전 문서 응답을 무시한다.", async () => {
@@ -701,8 +737,8 @@ describe("블로그 글 목록", () => {
     await vi.waitFor(() => expect(listed()).toEqual(["작업 4", "작업 3", "작업 2", "작업 1"]));
     await wrapper.get(".portfolio-entry").trigger("click");
     await flushPromises();
-    expect(wrapper.vm.$router.currentRoute.value.name).toBe("portfolio");
-    expect(wrapper.vm.$router.currentRoute.value.query.portfolioId).toBe("4");
+    expect(wrapper.vm.$router.currentRoute.value.name).toBe("portfolio-detail");
+    expect(wrapper.vm.$router.currentRoute.value.params.portfolioId).toBe("4");
     wrapper.vm.$router.back();
     await flushPromises();
     expect(wrapper.get("#home-tab-portfolio").attributes("aria-selected")).toBe("true");

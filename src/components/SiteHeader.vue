@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { homeRoute } from "@/utils/profile/home-route";
 import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import BrandLogo from "@/components/BrandLogo.vue";
@@ -39,7 +40,7 @@ function closeMenu() {
 }
 function navigate(id: Destination) {
   menuOpen.value = false;
-  void router.push({ name: id === "home" ? "user-home" : id });
+  void router.push(id === "home" && auth.user.value ? homeRoute(auth.user.value) : { name: id === "home" ? "user-home" : id });
 }
 function goHome() {
   menuOpen.value = false;
@@ -102,7 +103,7 @@ watch(
     </nav>
     <div class="site-header-actions">
       <div class="header-right">
-        <RouterLink v-if="auth.user.value" :to="{ name: 'user-home' }" class="mypage-link" aria-label="마이페이지" title="마이페이지">
+        <RouterLink v-if="auth.user.value" :to="homeRoute(auth.user.value)" class="mypage-link" aria-label="마이페이지" title="마이페이지">
           <Icon name="home" :size="22" />
         </RouterLink>
         <AccountActions compact />

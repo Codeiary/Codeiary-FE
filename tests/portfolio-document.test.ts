@@ -50,7 +50,8 @@ describe("포트폴리오 문서", () => {
     vi.spyOn(stage.element, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 200, 500, 300));
     vi.spyOn(first().element, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 200, 200, 80));
     vi.spyOn(second().element, "getBoundingClientRect").mockReturnValue(new DOMRect(350, 330, 250, 100));
-    const handle = first().get("button").element;
+    expect(first().findAll(".portfolio-block-handle")).toHaveLength(4);
+    const handle = first().get(".portfolio-block-edge-top").element;
     const { capture, release } = capturePointer(handle);
     await pointer(handle, "pointerdown", 110, 185);
     expect(capture).toHaveBeenCalledWith(1);

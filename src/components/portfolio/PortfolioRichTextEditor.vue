@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRecentPortfolioColors } from "@/composables/useRecentPortfolioColors";
 import { computed, ref, watch } from "vue";
 import { EditorContent, useEditor } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
@@ -34,6 +35,7 @@ const emit = defineEmits<{
   enter: [];
   focus: [];
 }>();
+const { colors: recentColors, remember: rememberColor } = useRecentPortfolioColors();
 const selectionVersion = ref(0);
 const editor = useEditor({
   content: props.flow ? (props.document ? normalizePortfolioDocument(props.document) : props.content) : runsToEditorDocument(props.content, props.runs),
@@ -111,10 +113,12 @@ function setSize(event: Event) {
   if (Number.isFinite(size) && size >= 10 && size <= 96)
     editor.value?.chain().setFontSize(`${size}px`).run();
 }
-function setColor(event: Event) {
-  const color = (event.target as HTMLInputElement).value;
+function applyColor(color: string) {
   if (/^#[\da-f]{6}$/i.test(color)) editor.value?.chain().setColor(color).run();
 }
+function setColor(event: Event) { applyColor((event.target as HTMLInputElement).value); }
+function saveColor(event: Event) { rememberColor((event.target as HTMLInputElement).value); }
+function useColor(color: string) { applyColor(color); rememberColor(color); }
 watch(() => props.disabled, (disabled) => editor.value?.setEditable(!disabled));
 watch(() => [props.content, props.runs, props.document] as const, ([content, runs, document]) => {
   if (!editor.value) return;
@@ -143,10 +147,13 @@ defineExpose({ editor });
         <option v-for="font in portfolioFonts" :key="font.id" :value="font.id">{{ font.label }}</option>
       </select>
       <label class="rich-size"><input aria-label="선택 글자 크기" type="number" min="10" max="96" :value="selectedSize" :disabled="disabled" @input="setSize" /><span>px</span></label>
-      <label class="rich-color" title="선택 글자 색상"><span aria-hidden="true" :style="{ borderColor: selectedColor }">A</span><input type="color" aria-label="선택 글자 색상" :value="selectedColor" :disabled="disabled" @input="setColor" /></label>
-      <input class="rich-color-code" aria-label="선택 글자 색상 코드" :value="selectedColor" maxlength="7" :disabled="disabled" @input="setColor" />
+      <label class="rich-color" title="선택 글자 색상"><span aria-hidden="true" :style="{ borderColor: selectedColor }">A</span><input type="color" aria-label="선택 글자 색상" :value="selectedColor" :disabled="disabled" @input="setColor" @change="saveColor" /></label>
+      <input class="rich-color-code" aria-label="선택 글자 색상 코드" :value="selectedColor" maxlength="7" :disabled="disabled" @input="setColor" @change="saveColor" />
       <button type="button" aria-label="굵게" :aria-pressed="editor?.isActive('bold')" :disabled="disabled" @mousedown.prevent @click="editor?.chain().focus().toggleBold().run()"><strong>B</strong></button>
       <button type="button" aria-label="기울임" :aria-pressed="editor?.isActive('italic')" :disabled="disabled" @mousedown.prevent @click="editor?.chain().focus().toggleItalic().run()"><em>I</em></button>
+      <div v-if="recentColors.length" class="rich-recent-colors" role="group" aria-label="최근 사용한 색상">
+        <span>최근 색상</span><button v-for="color in recentColors" :key="color" type="button" :aria-label="`최근 색상 ${color}`" :title="color" :style="{ backgroundColor: color }" :disabled="disabled" @mousedown.prevent @click="useColor(color)"></button>
+      </div>
     </div>
     </Teleport>
     <EditorContent :editor="editor" class="rich-text-content" :class="{ 'is-flow': flow }" :data-placeholder="placeholder" />
@@ -179,6 +186,8 @@ defineExpose({ editor });
 .is-heading .rich-text-content { font-size: inherit; font-weight: inherit; line-height: inherit; }
 .rich-text-content :deep(.tiptap p.is-editor-empty:first-child::before) { color: var(--theme-muted); }
 .rich-text-content :deep(.tiptap ::selection) { background: color-mix(in srgb, var(--theme-accent) 26%, transparent); }
+.rich-recent-colors { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; margin-top: 5px; color: var(--theme-muted); }
+.rich-recent-colors button { width: 22px; min-width: 22px; height: 22px; border: 1px solid var(--theme-border); border-radius: 50%; }
 .rich-text-toolbar :disabled { opacity: .5; }
 @media (max-width: 600px) { .rich-text-toolbar select { width: 112px; } }
 </style>

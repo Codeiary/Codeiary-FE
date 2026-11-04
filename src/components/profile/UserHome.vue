@@ -20,6 +20,8 @@ const props = withDefaults(defineProps<{
   profile: HomeProfile;
   posts: BlogPost[];
   portfolioItems?: PortfolioItem[];
+  portfolioCount?: number | null;
+  portfolioCountLoading?: boolean;
   portfolioTotal?: number;
   portfolioPageCount?: number;
   portfolioLoading?: boolean;
@@ -57,7 +59,7 @@ const editableUser = computed(() => {
 });
 const tabs = computed(() => [
   { id: "blog" as const, label: props.own ? "내 블로그" : "블로그", count: props.posts.length },
-  { id: "portfolio" as const, label: props.own ? "내 포트폴리오" : "포트폴리오", count: props.portfolioTotal ?? props.portfolioItems.length },
+  { id: "portfolio" as const, label: props.own ? "내 포트폴리오" : "포트폴리오", count: props.portfolioCountLoading ? "…" : props.portfolioCount === null ? "—" : props.portfolioCount ?? props.portfolioTotal ?? (props.portfolioLoading ? "…" : props.portfolioItems.length) },
 ]);
 const query = computed(() => search.value.trim().toLocaleLowerCase("ko-KR"));
 const categories = computed(() => categoryCounts(props.posts));

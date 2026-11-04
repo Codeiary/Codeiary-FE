@@ -1,3 +1,4 @@
+import { waitForPortfolioFonts } from "./fonts";
 import { encodeHtmlEntities, type JSONContent } from "@tiptap/core";
 import { blocksToMarkdown, type PortfolioBlock, type PortfolioTextRun } from "./layout";
 import { contentFromEditorDocument, normalizeTextRuns } from "./rich-text";
@@ -111,7 +112,7 @@ export function portfolioPayload(draft: PortfolioDraft, fonts: PortfolioFont[], 
 }
 
 export async function measurePortfolioBlocks(canvas: HTMLElement, blocks: PortfolioBlock[]): Promise<Map<string, BlockLayout>> {
-  await document.fonts?.ready;
+  await waitForPortfolioFonts(canvas);
   await Promise.all(Array.from(canvas.querySelectorAll("img"), (image) => image.decode?.().catch(() => undefined)));
   const stage = canvas.querySelector<HTMLElement>(".portfolio-document-blocks");
   const bounds = stage?.getBoundingClientRect();

@@ -46,6 +46,18 @@ export const cityRoutes: RouteRecordRaw[] = [
     meta: { section: "portfolio", title: "포트폴리오 — Codeiary" },
   },
   {
+    path: "/portfolio/:portfolioSlug/:portfolioId(\\d+)/view",
+    name: "portfolio-view",
+    component: () => import("@/views/PortfolioPresentationView.vue"),
+    meta: { section: "portfolio", title: "포트폴리오 — Codeiary" },
+  },
+  {
+    path: "/portfolio/:portfolioSlug/:portfolioId(\\d+)",
+    name: "portfolio-detail",
+    component: content,
+    meta: { section: "portfolio", title: "포트폴리오 — Codeiary" },
+  },
+  {
     path: "/portfolio/manage",
     name: "portfolio-manage",
     redirect: (to) => to.query.portfolioId
@@ -63,6 +75,12 @@ export const cityRoutes: RouteRecordRaw[] = [
     name: "news",
     component: content,
     meta: { section: "news", title: "최근 IT 이슈 — Codeiary" },
+  },
+  {
+    path: "/:nickname([가-힣A-Za-z0-9_]{2,20})",
+    name: "user-profile",
+    component: content,
+    meta: { section: "home", title: "사용자의 집 — Codeiary" },
   },
   {
     path: "/home",
