@@ -1,3 +1,4 @@
+import { hasNicknamePath } from "@/utils/profile/home-route";
 export const OAUTH_ATTEMPT_KEY = "codeiary.oauth.attempt";
 
 export function safeAuthReturn(value: unknown) {
@@ -7,6 +8,10 @@ export function safeAuthReturn(value: unknown) {
   if (/^\/portfolio\/write(?:\?id=[1-9]\d*)?$/.test(value)) return value;
   if (/^\/write(?:\/[a-f0-9-]{36})?$/.test(value) || ["/admin", "/home", "/portfolio", "/news"].includes(value))
     return value;
+  const match = /^\/([^/?#\\]+)(?:\?(?:tab=(?:blog|portfolio)))?$/.exec(value);
+  if (match) {
+    try { if (hasNicknamePath(decodeURIComponent(match[1]!))) return value; } catch { /* Invalid encoded path. */ }
+  }
   return "/";
 }
 export function googleLoginUrl(redirect: unknown) {

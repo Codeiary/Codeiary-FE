@@ -53,14 +53,31 @@ const positions = computed(() => {
     result.set(block.id, position);
     bottom = position.y + (heights.value[block.id] ?? 80);
   }
+  if (!props.editable) {
+    const placed: { original: PortfolioBlockPosition; adjusted: PortfolioBlockPosition }[] = [];
+    for (const [id, original] of [...result].sort((a, b) => a[1].y - b[1].y)) {
+      let y = original.y;
+      for (const previous of placed) {
+        const before = previous.original;
+        if (original.x < before.x + before.width && original.x + original.width > before.x
+          && original.y >= before.y + (before.height ?? 0)) {
+          y = Math.max(y, previous.adjusted.y + previous.adjusted.height! + original.y - before.y - (before.height ?? 0));
+        }
+      }
+      const adjusted = { ...original, y, height: Math.max(original.height ?? 0, heights.value[id] ?? 0) };
+      result.set(id, adjusted);
+      placed.push({ original, adjusted });
+    }
+  }
   return result;
 });
 const stageHeight = computed(() => Math.max(320, ...Array.from(positions.value, ([id, position]) => position.y + (position.height ?? heights.value[id] ?? 80) + 28)));
 const displayedBlocks = computed(() => props.editable || !free.value ? props.blocks : [...(props.blocks ?? [])].sort((a, b) => positions.value.get(a.id)!.y - positions.value.get(b.id)!.y || positions.value.get(a.id)!.x - positions.value.get(b.id)!.x));
 function elements() { return Array.from(stage.value?.children ?? []).filter((element): element is HTMLElement => element instanceof HTMLElement && !!element.dataset.blockId); }
 function measure() {
+  if (stage.value?.querySelector("code")) loadPortfolioFont("mono");
   const next: Record<string, number> = {};
-  elements().forEach((element) => { next[element.dataset.blockId!] = element.getBoundingClientRect().height || heights.value[element.dataset.blockId!] || 80; });
+  elements().forEach((element) => { next[element.dataset.blockId!] = (props.editable ? element.getBoundingClientRect().height : element.querySelector<HTMLElement>(".portfolio-block-content")?.scrollHeight) || heights.value[element.dataset.blockId!] || 80; });
   if (JSON.stringify(next) !== JSON.stringify(heights.value)) heights.value = next;
 }
 let observer: ResizeObserver | undefined;
@@ -68,11 +85,11 @@ function observe() {
   observer?.disconnect();
   if (typeof ResizeObserver !== "undefined") {
     observer ??= new ResizeObserver(measure);
-    elements().forEach((element) => observer!.observe(element));
+    elements().forEach((element) => { observer!.observe(element); const content = element.querySelector(".portfolio-block-content"); if (content) observer!.observe(content); });
   }
   measure();
 }
-watch(() => props.blocks?.map((block) => block.id).join("\u0000"), () => { void nextTick(observe); }, { flush: "post" });
+watch(() => [props.editable, props.blocks?.map((block) => block.id).join("\u0000")], () => { void nextTick(observe); }, { flush: "post" });
 onMounted(observe);
 onBeforeUnmount(() => { observer?.disconnect(); finishDrag(); });
 function select(id: string) { if (props.editable) emit("selectBlock", id); }
@@ -220,8 +237,8 @@ watch(() => props.editable, (editable) => { if (!editable) finishDrag(); });
       <div v-for="block in displayedBlocks" :key="block.id" class="portfolio-document-block" :data-block-id="block.id" :style="style(block)"
         :class="[`portfolio-block-${block.type}`, `portfolio-block-align-${block.align}`, { 'portfolio-block-selected': editable && selectedBlock === block.id, 'portfolio-block-dragging': dragging === block.id, 'portfolio-block-fixed-height': positions.get(block.id)?.height !== undefined }]"
         :role="editable ? 'group' : undefined" :aria-label="editable ? `${block.type === 'image' ? '이미지' : '본문'} 블록` : undefined" @click="select(block.id)">
-        <button v-if="editable" class="portfolio-block-handle" :aria-label="`${block.type === 'image' ? '이미지' : '본문'} 블록 선택. 드래그하여 이동`" :aria-pressed="selectedBlock === block.id"
-          @click.stop="select(block.id)" @pointerdown.stop="startDrag($event, block.id)" @pointermove="moveDrag" @pointerup="endDrag" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag" @dragstart.prevent><span aria-hidden="true">⠿</span></button>
+        <button v-for="edge in (editable ? ['top', 'right', 'bottom', 'left'] : [])" :key="edge" class="portfolio-block-handle" :class="`portfolio-block-edge-${edge}`" :aria-label="`${block.type === 'image' ? '이미지' : '본문'} 블록 선택. 드래그하여 이동`" :aria-pressed="selectedBlock === block.id"
+          @click.stop="select(block.id)" @pointerdown.stop="startDrag($event, block.id)" @pointermove="moveDrag" @pointerup="endDrag" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag" @dragstart.prevent><span aria-hidden="true"></span></button>
         <template v-if="editable && selectedBlock === block.id">
           <button v-for="handle in (block.type === 'image' ? handles.filter((handle) => handle.direction.length === 2) : handles)" :key="handle.direction" type="button" tabindex="-1" class="portfolio-block-resize" :class="`portfolio-resize-${handle.direction}`" :data-resize="handle.direction" :aria-label="`${handle.label} 크기 조절`" :title="`${handle.label} 크기 조절`"
             @click.stop @pointerdown.stop="startDrag($event, block.id, handle.direction)" @pointermove="moveDrag" @pointerup="endDrag" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag" @dragstart.prevent></button>
@@ -243,7 +260,8 @@ watch(() => props.editable, (editable) => { if (!editable) finishDrag(); });
 </template>
 
 <style>
-.portfolio-document { box-sizing: border-box; width: 100%; max-width: var(--portfolio-page-width); margin-inline: auto; padding: 40px 36px; border-radius: 8px; background: var(--theme-surface); color: var(--theme-text); font-family: var(--portfolio-font, inherit); font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; container: portfolio-document / inline-size; }
+.portfolio-document { box-sizing: border-box; width: 100%; max-width: var(--portfolio-page-width); margin-inline: auto; padding: 40px 36px; border-radius: 8px; background: var(--theme-surface); color: var(--theme-text); font-family: var(--portfolio-font, inherit); font-size: 16px; font-weight: 400; line-height: 1.8; overflow-wrap: anywhere; container: portfolio-document / inline-size; }
+.portfolio-document { color-scheme: light; background: #fff; color: #303d35; --theme-text: #303d35; --theme-muted: #747f70; --theme-surface: #fff; --theme-raised: #f4f2ea; --theme-border: #dedfd5; --theme-accent: #c46640; }
 .portfolio-document-header { margin-bottom: 48px; }
 .portfolio-document-actions { display: flex; justify-content: flex-end; align-items: center; min-height: 40px; margin-top: 12px; text-align: left; }
 .portfolio-document-title { margin: 0; color: inherit; font: 700 36px/1.3 var(--portfolio-font, inherit); letter-spacing: -.035em; overflow-wrap: anywhere; }
@@ -257,7 +275,8 @@ watch(() => props.editable, (editable) => { if (!editable) finishDrag(); });
 .portfolio-document-free { position: relative; display: block; min-height: 320px; }
 .portfolio-document-block { box-sizing: border-box; position: relative; min-width: 0; grid-column: 1 / -1; border-radius: 4px; }
 .portfolio-block-content { min-width: 0; }
-.portfolio-block-fixed-height > .portfolio-block-content { height: 100%; overflow: auto; overscroll-behavior: contain; }
+.portfolio-document-editable .portfolio-block-fixed-height > .portfolio-block-content { height: 100%; overflow: auto; overscroll-behavior: contain; }
+.portfolio-document:not(.portfolio-document-editable) .portfolio-block-content { height: auto; overflow: visible; }
 .portfolio-block-image > .portfolio-block-content { overflow: hidden; }
 .portfolio-block-text { white-space: pre-wrap; }
 
@@ -268,7 +287,13 @@ watch(() => props.editable, (editable) => { if (!editable) finishDrag(); });
 .portfolio-document-editable .portfolio-document-block:hover { outline-color: var(--theme-border); }
 .portfolio-document-editable .portfolio-block-selected { outline: 2px solid var(--theme-accent); z-index: 2; }
 .portfolio-block-dragging { z-index: 3; opacity: .75; }
-.portfolio-block-handle { position: absolute; z-index: 4; top: -31px; left: -8px; min-height: 24px; padding: 3px 8px; border: 1px solid var(--theme-accent); border-radius: 4px; background: var(--theme-surface); color: var(--theme-text); font: 600 11px/1.5 sans-serif; cursor: grab; touch-action: none; user-select: none; opacity: 0; }
+.portfolio-block-handle { position: absolute; z-index: 4; padding: 0; border: 0; background: transparent; cursor: move; touch-action: none; user-select: none; }
+.portfolio-block-edge-top, .portfolio-block-edge-bottom { left: -8px; right: -8px; height: 12px; }
+.portfolio-block-edge-top { top: -12px; }
+.portfolio-block-edge-bottom { bottom: -12px; }
+.portfolio-block-edge-left, .portfolio-block-edge-right { top: 0; bottom: 0; width: 12px; }
+.portfolio-block-edge-left { left: -12px; }
+.portfolio-block-edge-right { right: -12px; }
 .portfolio-document-block:is(:hover, :focus-within, .portfolio-block-selected) > .portfolio-block-handle { opacity: 1; }
 .portfolio-block-resize { position: absolute; z-index: 4; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; transform: translate(-50%, -50%); touch-action: none; user-select: none; }
 .portfolio-block-resize::after { content: ""; position: absolute; inset: 7px; border: 1.5px solid var(--theme-accent); border-radius: 2px; background: var(--theme-surface); }
@@ -298,8 +323,10 @@ watch(() => props.editable, (editable) => { if (!editable) finishDrag(); });
 .portfolio-document .portfolio-formatted-content ul { list-style: disc; }
 .portfolio-document .portfolio-formatted-content ol { list-style: decimal; }
 .portfolio-document .portfolio-formatted-content blockquote { padding-left: 16px; border-left: 3px solid var(--theme-border); color: var(--theme-muted); }
-.portfolio-document .portfolio-formatted-content code { padding: .15em .3em; border-radius: 3px; background: var(--theme-raised); font: .9em/1.6 ui-monospace, monospace; }
+.portfolio-document .portfolio-formatted-content code { padding: .15em .3em; border-radius: 3px; background: var(--theme-raised); font: .9em/1.6 "Roboto Mono", "Noto Sans KR", monospace; }
 .portfolio-document .portfolio-formatted-content pre { padding: 16px; border-radius: 6px; background: var(--theme-raised); overflow: auto; }
+.portfolio-document:not(.portfolio-document-editable) .portfolio-formatted-content pre { overflow: visible; white-space: pre-wrap; }
+.portfolio-document:not(.portfolio-document-editable) .portfolio-formatted-content pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .portfolio-document .portfolio-formatted-content pre code { padding: 0; }
 .portfolio-document .portfolio-formatted-content table { width: 100%; border-collapse: collapse; }
 .portfolio-document .portfolio-formatted-content :is(td, th) { border: 1px solid var(--theme-border); padding: 6px 10px; text-align: left; }
@@ -314,7 +341,7 @@ watch(() => props.editable, (editable) => { if (!editable) finishDrag(); });
 .portfolio-document .portfolio-formatted-content strong { font-weight: 700; }
 .portfolio-document .portfolio-formatted-content blockquote { padding: 0 0 0 16px; border-radius: 0; background: transparent; }
 .portfolio-document .portfolio-formatted-content pre { border: 0; font-size: inherit; line-height: inherit; }
-.portfolio-document .portfolio-formatted-content pre code { font: .9em/1.6 ui-monospace, monospace; background: transparent; white-space: pre; }
+.portfolio-document .portfolio-formatted-content pre code { font: .9em/1.6 "Roboto Mono", "Noto Sans KR", monospace; background: transparent; white-space: pre; }
 .portfolio-document .portfolio-formatted-content table { display: table; font-size: inherit; table-layout: auto; }
 .portfolio-document .portfolio-formatted-content :is(td, th) { min-width: 0; }
 .portfolio-document .portfolio-formatted-content a { color: var(--theme-accent); text-decoration: underline; font-weight: inherit; }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { waitForPortfolioFonts } from "@/utils/portfolio/fonts";
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import PortfolioDocument from "./PortfolioDocument.vue";
 import { loadMarkdownContent } from "@/utils/blog/markdown-loader";
@@ -9,6 +10,7 @@ const props = defineProps<{
   post: InstanceType<typeof PortfolioDocument>["$props"]["post"];
   blocks?: PortfolioBlock[];
   titleRuns?: PortfolioTextRun[];
+  defaultFont?: string;
   titleAlign?: "left" | "center" | "right";
   disabled?: boolean;
   iconOnly?: boolean;
@@ -34,10 +36,7 @@ async function exportPdf() {
     await nextTick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const ready = async () => {
-      await Promise.all(Array.from(document.querySelectorAll<HTMLLinkElement>("link[data-portfolio-font]"), (link) => link.sheet ? Promise.resolve() : new Promise<void>((resolve, reject) => {
-        link.addEventListener("load", () => resolve(), { once: true });
-        link.addEventListener("error", () => reject(new Error("Font stylesheet failed")), { once: true });
-      })));
+      if (output.value) await waitForPortfolioFonts(output.value);
       const images = Array.from(output.value?.querySelectorAll("img") ?? []);
       images.forEach((image) => { image.loading = "eager"; });
       await Promise.all([document.fonts?.ready, ...images.map((image) => image.decode())]);
@@ -72,7 +71,7 @@ onBeforeUnmount(finish);
   <p v-if="error" class="portfolio-pdf-error" role="alert">{{ error }}</p>
   <Teleport to="body">
     <div v-if="printing" ref="output" class="portfolio-print-root" aria-hidden="true">
-      <PortfolioDocument :post="post" :blocks="blocks" :title-runs="titleRuns" :title-align="titleAlign" />
+      <PortfolioDocument :post="post" :default-font="defaultFont" :blocks="blocks" :title-runs="titleRuns" :title-align="titleAlign" />
     </div>
   </Teleport>
 </template>

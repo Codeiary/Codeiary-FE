@@ -55,6 +55,7 @@ async function render(id?: number) {
     history: createMemoryHistory(),
     routes: [
       { path: "/portfolio/write", name: "portfolio-write", component: PortfolioWriteView },
+      { path: "/portfolio/:portfolioSlug/:portfolioId", name: "portfolio-detail", component: { template: "<main>포트폴리오 상세</main>" } },
       { path: "/portfolio", name: "portfolio", component: { template: "<main>내 포트폴리오</main>" } },
       { path: "/home", name: "user-home", component: { template: "<main>마이페이지</main>" } },
     ],
@@ -166,6 +167,7 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.removeItem("codeiary.portfolio.recent-colors");
     user.value = userFixture();
     portfolios.value = [];
   });
@@ -201,9 +203,28 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
     await flushPromises();
     expect(updatePortfolio).toHaveBeenLastCalledWith(42, expect.objectContaining({ title: "기존 작업", publicPortfolio: false }));
     expect(createPortfolio).not.toHaveBeenCalled();
-    expect(router.currentRoute.value.query.portfolioId).toBe("42");
+    expect(router.currentRoute.value.params.portfolioId).toBe("42");
     expect(portfolios.value).toHaveLength(1);
     expect(portfolios.value[0]?.content).toContain("수정 중인 본문");
+  });
+
+  it("바깥 클릭은 블록 선택을 해제하고 최근 색상은 편집기를 다시 열어도 사용할 수 있다", async () => {
+    const first = await render();
+    await writeTitle(first.wrapper, "색상 테스트");
+    await button(first.wrapper, "텍스트 블록 추가").trigger("click");
+    await writeCanvas(first.wrapper, "본문");
+    const color = first.wrapper.get('[aria-label="선택 글자 색상 코드"]');
+    await color.setValue("#123456");
+    expect(JSON.parse(localStorage.getItem("codeiary.portfolio.recent-colors")!)).toEqual(["#123456"]);
+    expect(first.wrapper.find('[aria-label="최근 색상 #123456"]').exists()).toBe(true);
+    await first.wrapper.get(".portfolio-canvas-scroll").trigger("pointerdown");
+    expect(first.wrapper.find(".portfolio-block-selected").exists()).toBe(false);
+    first.wrapper.unmount();
+    const second = await render();
+    await writeTitle(second.wrapper, "다음 문서");
+    expect(second.wrapper.find('[aria-label="최근 색상 #123456"]').exists()).toBe(true);
+    await second.wrapper.get('[aria-label="최근 색상 #123456"]').trigger("click");
+    expect(activeEditor(second.wrapper).getAttributes("textStyle").color).toBe("#123456");
   });
 
   it("저장 실패 시 입력 내용을 유지하고 성공 응답의 ID로 이동한다", async () => {
@@ -222,7 +243,7 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
     await flushPromises();
     expect(fetchPortfolioFonts).toHaveBeenCalled();
     expect(createPortfolio).toHaveBeenLastCalledWith(expect.objectContaining({ title: "서버 저장", defaultFontId: 1 }));
-    expect(router.currentRoute.value.query.portfolioId).toBe("700");
+    expect(router.currentRoute.value.params.portfolioId).toBe("700");
     expect(portfolios.value[0]!.id).toBe(700);
   });
 
@@ -247,7 +268,7 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
     expect(createPortfolio).toHaveBeenCalledWith(expect.objectContaining({
       blocks: [expect.objectContaining({ type: "TEXT", content: "" })],
     }));
-    expect(router.currentRoute.value.query.portfolioId).toBe("700");
+    expect(router.currentRoute.value.params.portfolioId).toBe("700");
   });
 
   it("캔버스 편집·위치 이동·실행 취소·복제·삭제 복원 결과를 저장하고 다시 편집한다", async () => {
@@ -305,7 +326,7 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
 
     await button(wrapper, "저장").trigger("click");
     await flushPromises();
-    expect(router.currentRoute.value.name).toBe("portfolio");
+    expect(router.currentRoute.value.name).toBe("portfolio-detail");
     expect(portfolios.value).toHaveLength(1);
     expect(portfolios.value[0]!.title).toBe("새 작업 모음");
     expect(portfolios.value[0]!.titleRuns?.[0]).toMatchObject({ text: "새 ", color: "#336699", size: 40 });
@@ -395,7 +416,7 @@ describe("포트폴리오 스튜디오 편집과 저장", () => {
     expect(wrapper.find('input[placeholder="이미지에 담긴 내용을 설명해 주세요"]').exists()).toBe(false);
     await button(wrapper, "저장").trigger("click");
     await flushPromises();
-    expect(router.currentRoute.value.name).toBe("portfolio");
+    expect(router.currentRoute.value.name).toBe("portfolio-detail");
     expect(portfolios.value[0]!.blocks).toEqual([expect.objectContaining({
       type: "image", imageUrl, alt: "portfolio",
     })]);

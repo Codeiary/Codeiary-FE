@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { portfolioRoute } from "@/utils/portfolio/routes";
+import { homeRoute } from "@/utils/profile/home-route";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import BrandLogo from "@/components/BrandLogo.vue";
@@ -61,6 +63,10 @@ const previewPost = computed(() => ({
   imageLayouts: {},
 }));
 
+function clearBlockSelection(event: PointerEvent) {
+  const target = event.target;
+  if (target instanceof Element && !target.closest(".portfolio-document-block, .portfolio-document-title, .portfolio-studio-inspector")) selectedId.value = "";
+}
 function selectBlock(id: string) {
   selectedId.value = id;
   inspector.value = "design";
@@ -127,7 +133,7 @@ let restoring = false;
 const snapshot = () => JSON.stringify(draft);
 const savedSnapshot = ref("");
 const dirty = computed(() => !loading.value && snapshot() !== savedSnapshot.value);
-function exit() { return router.push({ name: "user-home", query: { tab: "portfolio" } }); }
+function exit() { return router.push(user.value ? homeRoute(user.value, { tab: "portfolio" }) : { name: "user-home", query: { tab: "portfolio" } }); }
 function beforeUnload(event: BeforeUnloadEvent) {
   if (!dirty.value && !uploading.value) return;
   event.preventDefault();
@@ -209,7 +215,7 @@ async function save() {
       author: existing.value?.author ?? { id: owner.id, name: owner.nickname || owner.name } },
       ...portfolios.value.filter((item) => item.id !== id)];
     savedSnapshot.value = snapshot();
-    await router.push({ name: "portfolio", query: { portfolioId: String(id) } });
+    await router.push(portfolioRoute({ id, title: draft.title }));
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "포트폴리오를 저장하지 못했어요. 다시 시도해 주세요.";
   } finally {
@@ -252,11 +258,13 @@ async function loadDraft() {
 watch(() => route.query.id, () => { void loadDraft(); });
 onMounted(() => {
   void loadDraft();
+  document.addEventListener("pointerdown", clearBlockSelection);
   window.addEventListener("keydown", keyboardSave);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onBeforeUnmount(() => {
   loadRequest++;
+  document.removeEventListener("pointerdown", clearBlockSelection);
   window.removeEventListener("keydown", keyboardSave);
   window.removeEventListener("beforeunload", beforeUnload);
 });
@@ -317,7 +325,7 @@ onBeforeUnmount(() => {
             </div>
           </section>
           <div v-if="canEdit" class="portfolio-export-section">
-            <PortfolioPdfButton :post="previewPost" :title-runs="draft.titleRuns" :title-align="draft.titleAlign" :blocks="draft.blocks" :disabled="busy" />
+            <PortfolioPdfButton :post="previewPost" :default-font="draft.defaultFont" :title-runs="draft.titleRuns" :title-align="draft.titleAlign" :blocks="draft.blocks" :disabled="busy" />
           </div>
           </div>
         </div>

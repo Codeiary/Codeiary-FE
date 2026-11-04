@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { auth, AuthError } from "@/store/auth";
 import { authGuard, loginDestination } from "@/router/auth-guard";
+import { homeRoute } from "@/utils/profile/home-route";
 import { userFixture } from "./fixtures/auth";
 import SiteHeader from "@/components/SiteHeader.vue";
 
@@ -22,9 +23,15 @@ vi.mock("@/store/auth", async (original) => {
     },
   };
 });
+vi.mock("@/services/profile-api", () => ({ fetchHomeProfile: vi.fn(async () => ({ owner: { id: 2, nickname: "이웃", name: "이웃" }, email: "", github: "" })) }));
 const user = auth.user as { value: ReturnType<typeof userFixture> | null };
 const headers: VueWrapper[] = [];
 afterEach(() => headers.splice(0).forEach((header) => header.unmount()));
+
+it("닉네임이 있으면 내 집 링크를 루트 닉네임 주소로 통일한다", () => {
+  expect(homeRoute({ nickname: "기록자" })).toEqual({ name: "user-profile", params: { nickname: "기록자" }, query: {} });
+  expect(homeRoute({ nickname: "blog" }).name).toBe("user-home");
+});
 
 async function renderHeader() {
   const component = { template: "<div />" };
@@ -34,6 +41,7 @@ async function renderHeader() {
     { path: "/portfolio", name: "portfolio", component },
     { path: "/news", name: "news", component },
     { path: "/home", name: "user-home", component },
+    { path: "/:nickname", name: "user-profile", component },
     { path: "/blog/:authorSlug", name: "user-blog", component },
     { path: "/portfolio/manage", name: "portfolio-manage", component },
   ] });
@@ -87,6 +95,7 @@ describe("인증 라우트", () => {
       routes: [
         { path: "/", name: "city", component },
         { path: "/home", name: "user-home", component },
+    { path: "/:nickname", name: "user-profile", component },
         { path: "/login", name: "login", component },
         {
           path: "/onboarding",
@@ -131,7 +140,8 @@ describe("인증 라우트", () => {
   it("이웃집은 공개하고 내 집은 로그인한 사용자만 방문할 수 있다.", async () => {
     const router = routerFixture();
     await router.push("/home?resident=2");
-    expect(router.currentRoute.value.name).toBe("user-home");
+    expect(router.currentRoute.value.name).toBe("user-profile");
+    expect(router.currentRoute.value.params.nickname).toBe("이웃");
     await router.push("/home");
     expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/home");
     user.value = userFixture("USER");
