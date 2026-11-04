@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { portfolioRoute } from "@/utils/portfolio/routes";
+import { homeRoute } from "@/utils/profile/home-route";
+import { fetchHomeProfile } from "@/services/profile-api";
 import { displayName } from "@/utils/profile/display-name";
 import {
   computed,
@@ -100,7 +103,7 @@ const { directory, ownResidence, ownHouseLevel, loaded: residentsLoaded } = useR
 );
 const pageElement = ref<HTMLElement>();
 const selectedPortfolio = computed(() => {
-  const id = Number(route.query.portfolioId);
+  const id = Number(route.params.portfolioId ?? route.query.portfolioId);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 });
 const portfolioSearch = ref("");
@@ -113,7 +116,7 @@ const homePortfolioListing = shallowRef<Awaited<ReturnType<typeof fetchPortfolio
 const homePortfolioLoading = ref(false);
 const homePortfolioError = ref("");
 function openPortfolio(item: (typeof portfolios.value)[number]) {
-  void router.push({ query: { ...route.query, portfolioId: String(item.id) } });
+  void router.push(portfolioRoute(item));
 }
 const deleteConfirmationOpen = ref(false);
 const deleteDialog = ref<HTMLDialogElement>();
@@ -125,22 +128,41 @@ watch(deleteConfirmationOpen, async (open) => {
   await nextTick();
   deleteDialog.value?.showModal();
 });
-const visitingResident = computed(() =>
-  directory.value.find(
-    (resident) => String(resident.id) === route.query.resident,
-  ),
-);
+const namedHomeProfile = shallowRef<HomeProfile>();
+const homeProfileLoading = ref(false);
+const homeProfileError = ref("");
+const ownNickname = computed(() => typeof route.params.nickname === "string" && route.params.nickname.toLowerCase() === user.value?.nickname?.toLowerCase());
+const visitingResident = computed(() => directory.value.find((resident) =>
+  route.params.nickname ? resident.id === (ownNickname.value ? user.value?.id : namedHomeProfile.value?.owner.id)
+    : String(resident.id) === route.query.resident));
 const homeProfile = computed<HomeProfile>(() => {
+  if (route.params.nickname) return ownNickname.value ? createHomeProfile(user.value) : namedHomeProfile.value ?? createHomeProfile(null);
   const resident = visitingResident.value;
-  if (!resident || resident.id === user.value?.id)
-    return createHomeProfile(user.value);
-  return {
-    owner: resident,
-    email: resident.email ?? "",
-    github: resident.github ?? "",
-    profileImageUrl: resident.profileImageUrl,
-  };
+  if (!resident || resident.id === user.value?.id) return createHomeProfile(user.value);
+  return { owner: resident, email: resident.email ?? "", github: resident.github ?? "", profileImageUrl: resident.profileImageUrl };
 });
+let homeProfileRequest = 0;
+watch([() => route.params.nickname, () => user.value?.id, () => user.value?.nickname], async ([nickname, id, ownName], previous) => {
+  if (previous?.[2] && previous[1] === id && ownName && ownName !== previous[2]
+    && typeof nickname === "string" && nickname.toLowerCase() === String(previous[2]).toLowerCase() && user.value) {
+    await router.replace({ ...homeRoute(user.value), query: route.query });
+    return;
+  }
+  const revision = ++homeProfileRequest;
+  namedHomeProfile.value = undefined;
+  homeProfileError.value = "";
+  homeProfileLoading.value = false;
+  if (!route.params.nickname || import.meta.env.SSR) return;
+  homeProfileLoading.value = true;
+  try {
+    await auth.restore();
+    if (revision !== homeProfileRequest) return;
+    const profile = ownNickname.value ? createHomeProfile(user.value) : await fetchHomeProfile(String(route.params.nickname));
+    if (revision === homeProfileRequest) namedHomeProfile.value = profile;
+  } catch (error) {
+    if (revision === homeProfileRequest) homeProfileError.value = error instanceof Error ? error.message : "사용자를 찾을 수 없어요.";
+  } finally { if (revision === homeProfileRequest) homeProfileLoading.value = false; }
+}, { immediate: true });
 const homePosts = computed(() =>
   homeBlogPosts(posts.value, homeProfile.value.owner, user.value?.id),
 );
@@ -328,6 +350,9 @@ watch([portfolioMounted, section, selectedPortfolio, portfolioPage, portfolioSea
         const item = await fetchPortfolio(selectedPortfolio.value);
         if (revision === portfolioRequest) {
           portfolioDetail.value = item;
+          const canonical = portfolioRoute(item);
+          if ((route.name === "portfolio" || route.name === "portfolio-detail")
+            && (route.name !== "portfolio-detail" || route.params.portfolioSlug !== canonical.params.portfolioSlug)) await router.replace(canonical);
           portfolios.value = [...portfolios.value.filter((cached) => cached.id !== item.id), item];
         }
       } else {
@@ -338,13 +363,29 @@ watch([portfolioMounted, section, selectedPortfolio, portfolioPage, portfolioSea
       if (revision === portfolioRequest) portfolioError.value = error instanceof Error ? error.message : "포트폴리오를 불러오지 못했어요.";
     } finally { if (revision === portfolioRequest) portfolioLoading.value = false; }
   }, { immediate: true });
+const homePortfolioCount = ref<number>();
+const homePortfolioCountLoading = ref(false);
+let homeCountRequest = 0;
+watch([portfolioMounted, section, () => homeProfile.value.owner.id, () => user.value?.id], async () => {
+  const revision = ++homeCountRequest;
+  homePortfolioCount.value = undefined;
+  homePortfolioCountLoading.value = false;
+  const authorId = homeProfile.value.owner.id;
+  if (!portfolioMounted.value || section.value !== "home" || typeof authorId !== "number") return;
+  homePortfolioCountLoading.value = true;
+  try {
+    const page = await fetchPortfolioPage({ mine: authorId === user.value?.id, authorId, size: 1 });
+    if (revision === homeCountRequest) homePortfolioCount.value = page.totalElements;
+  } catch { /* Keep an unknown count rather than presenting a failed request as zero. */ }
+  finally { if (revision === homeCountRequest) homePortfolioCountLoading.value = false; }
+}, { immediate: true });
 watch([portfolioMounted, section, homeTab, homeSearch, homePage, () => homeProfile.value.owner.id, () => user.value?.id],
   async () => {
     const revision = ++homePortfolioRequest;
     homePortfolioListing.value = undefined;
     homePortfolioError.value = "";
     homePortfolioLoading.value = false;
-    if (!portfolioMounted.value || section.value !== "home" || homeTab.value !== "portfolio" || !homeProfile.value.owner.id) return;
+    if (!portfolioMounted.value || section.value !== "home" || homeTab.value !== "portfolio" || typeof homeProfile.value.owner.id !== "number") return;
     homePortfolioLoading.value = true;
     try {
       const page = await fetchPortfolioPage({ mine: homeProfile.value.owner.id === user.value?.id,
@@ -651,7 +692,7 @@ watch(
     postPageCache.clear();
     catalogCache.clear();
     blogLocations.clear();
-    if (!user.value && section.value === "home" && !visitingResident.value)
+    if (!user.value && route.name === "user-home" && !visitingResident.value)
       void router.replace({ name: "city" });
     if (isBlogRoute.value && previousUserId !== undefined)
       void router.replace({ name: "blog", state: { blogPrevious: null } });
@@ -677,6 +718,8 @@ onBeforeUnmount(() => {
   articleRequest++;
   portfolioRequest++;
   homePortfolioRequest++;
+  homeProfileRequest++;
+  homeCountRequest++;
 });
 onMounted(() => {
   portfolioMounted.value = true;
@@ -704,9 +747,7 @@ async function deleteCurrentPortfolio() {
     await removePortfolio(item.id);
     portfolios.value = portfolios.value.filter((portfolioItem) => portfolioItem.id !== item.id);
     deleteConfirmationOpen.value = false;
-    const query = { ...route.query };
-    delete query.portfolioId;
-    await router.replace({ query });
+    await router.replace({ name: "portfolio" });
   } catch (error) {
     deleteError.value = error instanceof Error ? error.message : "포트폴리오를 삭제하지 못했어요. 다시 시도해 주세요.";
   } finally {
@@ -788,10 +829,12 @@ async function deleteCurrentPortfolio() {
         {{ storageError }}
       </p>
       <UserHome
-        v-if="section === 'home' && (route.query.resident ? visitingResident : user)"
+        v-if="section === 'home' && (route.params.nickname ? (ownNickname || namedHomeProfile) : route.query.resident ? visitingResident : user)"
         :profile="homeProfile"
         :posts="homePosts"
         :portfolio-items="homePortfolios"
+        :portfolio-count="homePortfolioCount ?? null"
+        :portfolio-count-loading="homePortfolioCountLoading"
         :portfolio-total="homePortfolioListing?.totalElements"
         :portfolio-page-count="homePortfolioListing?.totalPages"
         :portfolio-loading="homePortfolioLoading"
@@ -802,19 +845,21 @@ async function deleteCurrentPortfolio() {
         v-model:category="homeCategory"
         :own="homeProfile.owner.id === user?.id"
         :post-count="
-          visitingResident?.postCount ?? ownResidence?.postCount ?? 0
+          visitingResident?.postCount ?? (homeProfile.owner.id === user?.id ? ownResidence?.postCount ?? 0 : 0)
         "
-        :level="visitingResident?.level ?? ownHouseLevel"
+        :level="visitingResident?.level ?? (homeProfile.owner.id === user?.id ? ownHouseLevel : 0)"
         :activity-points="
           visitingResident
             ? visitingResident.activityPoints
-            : (ownResidence?.activityPoints ?? null)
+            : (homeProfile.owner.id === user?.id ? ownResidence?.activityPoints ?? null : null)
         "
-        @portfolio="item => router.push({ name: 'portfolio', query: { portfolioId: String(item.id) } })"
+        @portfolio="item => router.push(portfolioRoute(item))"
         @write="kind => kind === 'blog' ? startWriting() : writePortfolio()"
         @post="openPost"
         @prefetch="prefetchArticle"
       />
+      <div v-else-if="section === 'home' && homeProfileLoading" class="window-body" aria-busy="true"></div>
+      <div v-else-if="section === 'home' && homeProfileError" class="window-body" role="alert">{{ homeProfileError }}</div>
       <div v-else-if="section === 'home' && residentsLoaded" class="window-body">
         <div class="empty-state">
           <h3>집을 찾을 수 없어요</h3>
@@ -927,8 +972,9 @@ async function deleteCurrentPortfolio() {
                 :blocks="portfolio.blocks"
               >
                 <template #actions>
+                  <RouterLink :to="portfolioRoute(portfolio, true)" class="portfolio-fullscreen-link" aria-label="전체 화면 보기" title="전체 화면 보기"><Icon name="eye" :size="18" /></RouterLink>
                   <ContentActions v-if="canManagePortfolio" action="edit" subject="포트폴리오" deletable @action="managePortfolio" />
-                  <PortfolioPdfButton v-if="canManagePortfolio" icon-only :post="publishedPortfolio" :title-runs="portfolio.titleRuns" :title-align="portfolio.titleAlign" :blocks="portfolio.blocks" />
+                  <PortfolioPdfButton v-if="canManagePortfolio" icon-only :post="publishedPortfolio" :default-font="portfolio.defaultFont" :title-runs="portfolio.titleRuns" :title-align="portfolio.titleAlign" :blocks="portfolio.blocks" />
                 </template>
               </PortfolioDocument>
         </div>
@@ -960,3 +1006,8 @@ async function deleteCurrentPortfolio() {
     </main>
   </div>
 </template>
+
+<style scoped>
+.portfolio-fullscreen-link { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 7px; color: var(--theme-muted); text-decoration: none; }
+.portfolio-fullscreen-link:hover { background: var(--theme-raised); color: var(--theme-text); }
+</style>

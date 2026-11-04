@@ -1,6 +1,8 @@
 import type { RouteLocationNormalized } from "vue-router";
 import { AuthError, auth } from "@/store/auth";
 
+import { homeRoute, hasNicknamePath } from "@/utils/profile/home-route";
+import { fetchHomeProfile } from "@/services/profile-api";
 import { safeAuthReturn } from "@/utils/auth/oauth";
 
 export function loginDestination(value: unknown) {
@@ -12,6 +14,19 @@ export function loginDestination(value: unknown) {
 
 export async function authGuard(to: RouteLocationNormalized) {
   if (to.name === "oauth-callback") return;
+  if (to.name === "user-home" && to.query.resident) {
+    try {
+      const profile = await fetchHomeProfile(Number(to.query.resident));
+      if (hasNicknamePath(profile.owner.nickname)) {
+        const { resident, ...query } = to.query;
+        return { name: "user-profile", params: { nickname: profile.owner.nickname }, query, replace: true };
+      }
+    } catch { /* The home page renders a missing-profile message. */ }
+  }
+  if (to.name === "user-home" && !to.query.resident) {
+    await auth.restore();
+    if (hasNicknamePath(auth.user.value?.nickname)) return { ...homeRoute(auth.user.value!), query: to.query, replace: true };
+  }
   const requiresAuth = to.meta.requiresAuth || (to.name === "user-home" && !to.query.resident);
   if (!requiresAuth && !to.meta.requiresAdmin && to.name !== "login") {
     void auth.restore();

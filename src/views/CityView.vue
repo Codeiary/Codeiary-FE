@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { homeRoute } from "@/utils/profile/home-route";
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "@/components/Icon.vue";
@@ -70,7 +71,7 @@ async function moveDistrict(index: number) {
 }
 function enterResidence(resident: Residence) {
   city?.returnFromVisit();
-  return router.push({ name: "user-home", query: { resident: String(resident.id) } });
+  return router.push(resident.nickname ? homeRoute(resident) : { name: "user-home", query: { resident: String(resident.id) } });
 }
 async function visitResidence(resident: Residence) {
   await nextTick();
