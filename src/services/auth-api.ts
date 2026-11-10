@@ -39,6 +39,14 @@ export function createAuthApi(
         const code =
           typeof body.code === "string" ? body.code : "REQUEST_FAILED";
         const messages: Record<string, string> = {
+          INVALID_GITHUB_LINK: "GitHub 계정을 먼저 연결해 주세요.",
+          GITHUB_REPOSITORY_CREATION_FAILED: "CodeiaryBlog을 만들 수 없어요. 같은 이름의 저장소가 있다면 앱 접근 권한을 확인해 주세요.",
+          GITHUB_APP_INSTALLATION_REQUIRED: "GitHub App 설치와 저장소 생성 권한 승인이 필요해요.",
+          GITHUB_REAUTH_REQUIRED: "GitHub 인증이 만료됐어요. 다시 인증해 주세요.",
+          GITHUB_ACCESS_DENIED: "GitHub 접근이 제한됐어요. 앱 권한과 API 사용 한도를 확인해 주세요.",
+          GITHUB_REPOSITORY_UNAVAILABLE: "저장소에 접근할 수 없어요. 앱 설치와 쓰기 권한을 확인해 주세요.",
+          GITHUB_RATE_LIMITED: "GitHub 요청이 많아요. 잠시 후 다시 시도해 주세요.",
+          GITHUB_UNAVAILABLE: "GitHub에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.",
           NICKNAME_TAKEN: "이미 사용 중인 닉네임이에요.",
           INVALID_NICKNAME: "닉네임 형식을 확인해 주세요.",
           INVALID_IMAGE: "사진을 읽을 수 없어요. 다른 이미지를 선택해 주세요.",
