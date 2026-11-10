@@ -36,7 +36,7 @@ if (!production) {
   const proxy = httpProxy.createProxyServer({ target: backend, xfwd: true, proxyTimeout: 60_000 });
   app.use((req, res, next) => {
     if (!["/posts", "/portfolios", "/auth/reissue", "/auth/logout"].includes(req.path)
-      && !["/posts/", "/portfolios/", "/users/", "/admin/", "/images/", "/oauth2/", "/login/oauth2/"].some((prefix) => req.path.startsWith(prefix))) return next();
+      && !["/posts/", "/portfolios/", "/users/", "/admin/", "/images/", "/github/", "/oauth2/", "/login/oauth2/"].some((prefix) => req.path.startsWith(prefix))) return next();
     proxy.web(req, res, (error) => {
       console.error("Backend proxy failed:", error.message);
       if (!res.headersSent) res.status(502).json({ code: "BACKEND_UNAVAILABLE" });

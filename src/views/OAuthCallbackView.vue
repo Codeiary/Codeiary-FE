@@ -16,7 +16,7 @@ onMounted(async () => {
   try {
     redirect.value = consumeOAuthAttempt();
     if (providerError)
-      throw new Error("Google 로그인이 취소되었어요. 다시 시도해 주세요.");
+      throw new Error("계정 인증이 취소되었거나 연결하지 못했어요. 다시 시도해 주세요.");
     await auth.completeOAuthLogin();
     await router.replace(
       auth.needsOnboarding.value
@@ -45,7 +45,7 @@ onMounted(async () => {
     <div v-else class="auth-connecting" role="status">
       <span class="auth-spinner"></span>
       <h1>곧 만나요<span>.</span></h1>
-      <p class="auth-description">Google 로그인 정보를 확인하고 있어요.</p>
+      <p class="auth-description">계정 인증 정보를 확인하고 있어요.</p>
     </div>
   </AuthLayout>
 </template>
