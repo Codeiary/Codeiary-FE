@@ -4,6 +4,7 @@ import { auth, AuthError, type ProfileUpdateInput, type UserProfile } from "@/st
 import { nicknameError } from "@/utils/auth/validation";
 import { prepareAvatar } from "@/utils/profile/avatar-upload";
 import Icon from "@/components/Icon.vue";
+import GitHubBlogConnection from "@/components/profile/GitHubBlogConnection.vue";
 
 const props = defineProps<{ user: UserProfile }>();
 const emit = defineEmits<{ saved: []; cancel: [] }>();
@@ -294,6 +295,8 @@ async function save() {
           <button v-if="nicknameStatus === 'error'" type="button" @click="checkNickname">다시 확인</button>
         </p>
       </div>
+      <div class="profile-github-field">
+      <GitHubBlogConnection />
       <label for="profile-github-url">
         <span>GitHub <small>선택</small></span>
         <input
@@ -309,6 +312,7 @@ async function save() {
           :aria-describedby="invalidField === 'githubUrl' ? 'profile-edit-error' : undefined"
         />
       </label>
+      </div>
       <label for="profile-contact-email">
         <span>공개 이메일 <small>선택</small></span>
         <input
@@ -358,6 +362,9 @@ async function save() {
 .profile-editor input::placeholder { color: var(--theme-muted); opacity: .75; }
 .profile-editor input:focus-visible, .profile-editor button:focus-visible { outline: 2px solid color-mix(in srgb, var(--theme-text) 28%, transparent); outline-offset: 2px; }
 .profile-editor input[aria-invalid="true"] { border-color: var(--theme-accent); }
+.profile-github-field { position: relative; }
+.profile-github-field :deep(.github-connection) { position: absolute; top: -10px; right: 0; }
+.profile-github-field :deep(summary) { width: 34px; height: 34px; }
 .profile-nickname-help { min-height: 18px; margin: 7px 0 0; color: var(--theme-muted); font-size: 12px; line-height: 1.5; }
 .profile-nickname-help.is-available { color: var(--theme-accent); }
 .profile-nickname-help.is-invalid { color: var(--theme-text); }

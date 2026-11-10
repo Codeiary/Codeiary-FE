@@ -18,6 +18,7 @@ vi.mock("@/store/auth", async (original) => {
       checkNickname: vi.fn(),
       uploadProfileImage: vi.fn(),
       updateProfile: vi.fn(),
+      authorizedRequest: vi.fn(),
     },
   };
 });
@@ -31,6 +32,7 @@ beforeEach(() => {
   vi.mocked(auth.checkNickname).mockReset().mockResolvedValue({ available: true });
   vi.mocked(auth.uploadProfileImage).mockReset().mockResolvedValue({ profileImageUrl: "https://images.example.com/uploaded.jpg" });
   vi.mocked(auth.updateProfile).mockReset();
+  vi.mocked(auth.authorizedRequest).mockReset().mockResolvedValue({ connected: false, login: null });
   vi.mocked(prepareAvatar).mockReset().mockResolvedValue(new File(["jpeg"], "profile.jpg", { type: "image/jpeg" }));
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:profile-preview");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
@@ -69,9 +71,11 @@ describe("사용자의 집", () => {
     expect(wrapper.find(".home-content-header .home-building-info").exists()).toBe(true);
     expect(wrapper.find(".home-content-header .home-edit-profile").exists()).toBe(true);
     expect(wrapper.findAll('[role="tab"]').map((tab) => tab.text())).toEqual(["내 블로그2", "내 포트폴리오0"]);
-    expect(wrapper.get(".home-content-toolbar").text()).toBe("글쓰기");
+    expect(wrapper.get(".home-content-toolbar .home-write").text()).toBe("글쓰기");
+    expect(wrapper.find(".github-connection").exists()).toBe(false);
     await wrapper.get(".home-write").trigger("click");
     await wrapper.get("#home-tab-portfolio").trigger("click");
+    expect(wrapper.find(".github-connection").exists()).toBe(false);
     expect(wrapper.get(".home-write").text()).toBe("포폴 쓰기");
     expect(wrapper.get(".home-content-toolbar").text()).toBe("포폴 쓰기");
     await wrapper.get(".home-write").trigger("click");
@@ -81,6 +85,7 @@ describe("사용자의 집", () => {
     const wrapper = render(userFixture("USER"), false);
     expect(wrapper.find('a[href^="mailto:"]').exists()).toBe(false);
     expect(wrapper.find('a[href^="https://github.com/"]').exists()).toBe(false);
+    expect(wrapper.find(".github-connection").exists()).toBe(false);
     expect(createHomeProfile(userFixture()).email).toBe("");
     expect(createHomeProfile(userFixture()).github).toBe("");
   });
