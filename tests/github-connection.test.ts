@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { auth } from "@/store/auth";
 import { mount, flushPromises } from "@vue/test-utils";
 import GitHubBlogConnection from "@/components/profile/GitHubBlogConnection.vue";
+import OAuthCallbackView from "@/views/OAuthCallbackView.vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { githubLinkUrl, consumeOAuthAttempt } from "@/utils/auth/oauth";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); sessionStorage.clear(); });
@@ -51,6 +53,23 @@ describe("GitHub OAuth 연동 시작", () => {
 });
 
 describe("OAuth 한 번으로 저장소 생성과 연결", () => {
+  it("저장소 생성 실패는 실제 OAuth 시도 후에만 안내하고 기존 로그인은 복원한다", async () => {
+    const restore = vi.spyOn(auth, "completeOAuthLogin").mockResolvedValue(undefined);
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      { path: "/auth/callback", component: OAuthCallbackView },
+      { path: "/home", component: { template: "<div />" } },
+    ] });
+    await router.push("/auth/callback?error=github_repository");
+    await router.isReady();
+    const wrapper = mount(OAuthCallbackView, { global: { plugins: [router],
+      stubs: { AuthLayout: { template: "<div><slot /></div>" } } } });
+    await flushPromises();
+    expect(restore).toHaveBeenCalledOnce();
+    expect(wrapper.get('[role="alert"]').text()).toContain("GitHub 저장소를 연결하지 못했어요");
+    expect(wrapper.get("button.auth-primary").text()).toBe("GitHub 연결");
+    expect(wrapper.find('[href="/login"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
   it("완료된 저장소 정보와 해제 버튼만 표시한다", async () => {
     const request = vi.spyOn(auth, "authorizedRequest").mockResolvedValue({ connected: true, login: "octocat",
       repository: { installationId: 10, id: 20, owner: "octocat", name: "CodeiaryBlog", branch: "main" } });
