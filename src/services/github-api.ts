@@ -6,6 +6,11 @@ export interface GitHubConnection {
   login: string | null;
   repository?: GitHubRepository | null;
 }
+export type GitHubSyncStatus = "PENDING" | "ENQUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+export interface GitHubPostSync { connected: boolean; status: GitHubSyncStatus | null }
+export function fetchGitHubPostSync(postId: number) {
+  return auth.authorizedRequest<GitHubPostSync>(`/github/posts/${postId}/sync`);
+}
 export function fetchGitHubConnection() {
   return auth.authorizedRequest<GitHubConnection>("/github/connection");
 }
