@@ -15,14 +15,26 @@ export function safeAuthReturn(value: unknown) {
   return "/";
 }
 export function googleLoginUrl(redirect: unknown) {
-  const endpoint =
-    import.meta.env.VITE_GOOGLE_AUTH_URL || "/oauth2/authorization/google";
+  return oauthAuthorizationUrl(
+    import.meta.env.VITE_GOOGLE_AUTH_URL || "/oauth2/authorization/google", redirect,
+  );
+}
+export function githubLinkUrl() {
+  const api = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+  return oauthAuthorizationUrl(`${api}/oauth2/authorization/github`, "/home");
+}
+function oauthAuthorizationUrl(endpoint: string, redirect: unknown) {
   const url = new URL(endpoint, location.origin);
   if (
     url.protocol !== "https:" &&
     !(import.meta.env.DEV && url.origin === location.origin)
   )
     throw new Error("로그인 연결 주소를 확인해 주세요.");
+  rememberOAuthAttempt(redirect);
+  // Spring handles OAuth state and the provider callback.
+  return url.href;
+}
+export function rememberOAuthAttempt(redirect: unknown) {
   try {
     sessionStorage.setItem(
       OAUTH_ATTEMPT_KEY,
@@ -31,8 +43,6 @@ export function googleLoginUrl(redirect: unknown) {
   } catch {
     // Cookie authentication still works when optional return-address storage is blocked.
   }
-  // Spring owns OAuth state, Google code exchange, and authentication cookies.
-  return url.href;
 }
 export function consumeOAuthAttempt() {
   let saved: { redirect?: string; createdAt?: number } | null = null;

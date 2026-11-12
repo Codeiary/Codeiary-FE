@@ -29,6 +29,7 @@ import BlogPagination from "@/components/blog/BlogPagination.vue";
 import PostArticle from "@/components/blog/PostArticle.vue";
 import PostComments from "@/components/blog/comments/PostComments.vue";
 import PostLikeButton from "@/components/blog/PostLikeButton.vue";
+import GitHubPostSyncStatus from "@/components/blog/GitHubPostSyncStatus.vue";
 import { commentPostKey } from "@/utils/blog/comments";
 import { editPost } from "@/services/blog-storage";
 import { fetchPost, fetchPosts, fetchPostPage, removePost, type PostLikeState } from "@/services/blog-api";
@@ -897,12 +898,14 @@ async function deleteCurrentPortfolio() {
             @select-author="openAuthorBlog"
           >
             <template #actions>
-              <ContentActions
-                v-if="contentAction === 'edit'"
-                action="edit"
-                :deletable="canDeleteArticle"
-                @action="handleContentAction"
-              />
+              <div v-if="contentAction === 'edit'" class="blog-owner-actions">
+                <GitHubPostSyncStatus :post-id="article.id" />
+                <ContentActions
+                  action="edit"
+                  :deletable="canDeleteArticle"
+                  @action="handleContentAction"
+                />
+              </div>
             </template>
           </PostArticle>
           <div v-if="article.visibility !== 'PRIVATE'" class="article-like-actions">
@@ -1008,6 +1011,7 @@ async function deleteCurrentPortfolio() {
 </template>
 
 <style scoped>
+.blog-owner-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .portfolio-fullscreen-link { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 7px; color: var(--theme-muted); text-decoration: none; }
 .portfolio-fullscreen-link:hover { background: var(--theme-raised); color: var(--theme-text); }
 </style>
